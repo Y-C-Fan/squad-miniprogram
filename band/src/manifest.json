@@ -1,16 +1,19 @@
 {
-  "name": "squad-band",
+  "package": "com.chaowi.squad",
+  "name": "蹲队",
   "versionName": "1.0.0",
   "versionCode": 1,
   "minPlatformVersion": 1030,
   "icon": "/common/logo.png",
+  "deviceTypeList": [
+    "watch"
+  ],
   "features": [
-    { "name": "system.prompt" },
+    { "name": "system.sensor" },
     { "name": "system.vibrator" },
     { "name": "system.storage" },
-    { "name": "system.sensor" }
+    { "name": "system.prompt" }
   ],
-  "permissions": [],
   "config": {
     "logLevel": "log",
     "designWidth": 168,

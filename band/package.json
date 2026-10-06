@@ -7,8 +7,13 @@
   "description": "深蹲自动计数 —— 小米手环 9 Pro 版",
   "license": "MIT",
   "scripts": {
-    "build": "aiot build --mode release",
-    "watch": "aiot watch",
-    "clean": "aiot clean"
+    "dev": "aiot build --mode debug",
+    "build": "aiot build",
+    "start": "aiot start",
+    "release": "aiot release",
+    "resign": "aiot resign"
+  },
+  "devDependencies": {
+    "aiot-toolkit": "^2.0.5"
   }
 }

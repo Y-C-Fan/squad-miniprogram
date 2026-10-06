@@ -4,7 +4,6 @@
  * 与小程序共用同一套计数算法（common/squat-detector.js）
  */
 
-import storage from '@system.storage'
 
 export default {
   onCreate() {

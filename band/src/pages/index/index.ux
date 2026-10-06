@@ -13,21 +13,20 @@
     <text class="hint">{{ tip }}</text>
 
     <div class="bar-track" if="{{ running }}">
-      <div class="bar-fill" style="width: {{ ring * 100 }}%;"></div>
+      <div class="bar-fill" style="width: {{ ringPct }}%;"></div>
     </div>
 
-    <div class="stats" if="{{ running }}">
+    <div class="stats">
       <text class="stat">{{ timeText }}</text>
-      <text class="stat">{{ seconds }}s</text>
+      <text class="stat" if="{{ running }}">{{ stateText }}</text>
+      <text class="stat" if="{{ !running }}">今日 {{ todayCount }}</text>
     </div>
 
     <div class="btn main" onclick="toggle">
-      <text>{{ running ? '结束' : '开始' }}</text>
+      <text class="btn-text">{{ running ? "结束并保存" : "开始训练" }}</text>
     </div>
 
-    <div class="btn ghost" onclick="reset" if="{{ running || count > 0 }}">
-      <text>重置</text>
-    </div>
+    <text class="foot" if="{{ !running }}">灵敏度：中 · 站着别动 1 秒</text>
   </div>
 </template>
 
@@ -38,6 +37,13 @@ import storage from '@system.storage'
 import SquatDetector from '../../common/squat-detector.js'
 
 var MODE_LABEL = { tilt: '口袋', lift: '手持' }
+var KEY_TODAY = 'sq_today'
+
+function pad(n) { return n < 10 ? '0' + n : '' + n }
+function dayKey(ts) {
+  var d = new Date(ts)
+  return d.getFullYear() + '-' + pad(d.getMonth() + 1) + '-' + pad(d.getDate())
+}
 
 export default {
   private: {
@@ -45,41 +51,54 @@ export default {
     count: 0,
     seconds: 0,
     timeText: '00:00',
-    tip: '点击开始，先站稳 1 秒',
-    ring: 0,
+    tip: '点击开始，站着别动 1 秒',
+    ringPct: 0,
     mode: 'lift',
     modeLabel: '手持',
     todayCount: 0,
-    lastTs: 0
+    stateText: ''
   },
 
   onInit() {
     this.detector = new SquatDetector({ mode: this.mode, sensitivity: 'medium' })
     this.timer = null
+    this.ringPct = 0
+    this.stateText = ''
   },
 
   onShow() {
     var self = this
-    // 读今天的累计次数
+    // 读取今日累计。只在同一自然日内累加，跨天自动归零。
     try {
-      var raw = storage.getSync({ key: 'sq_today', success: function (v) { return v } })
-      if (raw && typeof raw.count === 'number') {
-        self.todayCount = raw.count
-      }
+      storage.get({
+        key: KEY_TODAY,
+        success: function (res) {
+          var v = res.data
+          if (v && v.key === dayKey(Date.now())) self.todayCount = v.count || 0
+          else self.todayCount = 0
+        },
+        fail: function () { self.todayCount = 0 }
+      })
     } catch (e) {
-      console.log('读取历史失败', e)
+      console.log('读取历史失败 ' + e)
     }
   },
 
   onHide() {
+    // Vela 在 onHide 后 30 秒若无活动定时器或传感器会被 Runtime 强制冻结，
+    // 所以离开页面必须把资源收掉，回来再在 onShow 里重建。
     this.stopSensor()
     this.stopTimer()
-    // 离开应用时如果还在训练，自动落一次记录
-    if (this.running) this.saveSession()
+    if (this.running) this.finish(false)
+  },
+
+  onDestroy() {
+    this.stopSensor()
+    this.stopTimer()
   },
 
   toggle() {
-    if (this.running) this.stop()
+    if (this.running) this.finish(false)
     else this.start()
   },
 
@@ -89,59 +108,64 @@ export default {
     this.count = 0
     this.seconds = 0
     this.timeText = '00:00'
-    this.ring = 0
+    this.ringPct = 0
+    this.stateText = '校准'
     this.tip = '站稳别动，正在校准…'
 
     this.startSensor()
     this.startTimer()
+    this.vibrate('heavy')
   },
 
-  stop() {
-    this.stopSensor()
-    this.stopTimer()
-    this.saveSession()
-    this.running = false
-    this.tip = '已保存，休息一下'
-    vibrator.vibrate({ type: 'heavy' })
-  },
-
-  reset() {
+  finish() {
     this.stopSensor()
     this.stopTimer()
     this.running = false
-    this.count = 0
-    this.seconds = 0
-    this.timeText = '00:00'
-    this.ring = 0
-    this.tip = '点击开始，先站稳 1 秒'
+    this.stateText = ''
+    this.ringPct = 0
+
+    if (this.count > 0) {
+      this.saveSession()
+      this.vibrate('heavy')
+      this.tip = '完成 ' + this.count + ' 次'
+    } else {
+      this.tip = '没数到，试试换个摆放'
+    }
   },
 
   toggleMode() {
-    // 手环在手腕上，倾角信号会被手臂摆动污染，所以默认走垂直位移检测
+    // 手环戴在手腕上，倾角会被手臂摆动污染，所以默认走垂直位移检测。
+    // 点右上角可以在两种模式间切换对比。
     this.mode = this.mode === 'lift' ? 'tilt' : 'lift'
     this.modeLabel = MODE_LABEL[this.mode]
-    this.detector.setMode(this.mode)
-    if (!this.running) {
-      this.detector = new SquatDetector({ mode: this.mode, sensitivity: 'medium' })
-    }
+    if (this.running) this.detector.setMode(this.mode)
+    else this.detector = new SquatDetector({ mode: this.mode, sensitivity: 'medium' })
     this.tip = '已切到' + this.modeLabel + '模式'
+  },
+
+  vibrate(type) {
+    try {
+      vibrator.vibrate({ type: type || 'light' })
+    } catch (e) {
+      console.log('振动失败 ' + e)
+    }
   },
 
   startSensor() {
     var self = this
     try {
       sensor.subscribeAccelerometer({
-        interval: 'game',   // 约 20ms/次，和小程序端采样率一致
-        callback: function (ret) {
-          self.onAcc(ret)
-        },
+        // game ≈ 20ms/次，与微信小程序同量级，所以算法阈值可原样复用
+        interval: 'game',
+        callback: function (ret) { self.onAcc(ret) },
         fail: function (msg, code) {
-          console.error('加速度计订阅失败', msg, code)
-          self.$prompt.showToast({ message: '传感器不可用' })
+          console.error('加速度计订阅失败 ' + msg + ' ' + code)
+          self.tip = '传感器不可用'
         }
       })
     } catch (e) {
-      console.error('subscribeAccelerometer 异常', e)
+      console.error('subscribeAccelerometer 异常 ' + e)
+      this.tip = '传感器启动失败'
     }
   },
 
@@ -151,18 +175,22 @@ export default {
 
   onAcc(ret) {
     if (!this.running) return
-    var now = Date.now()
-    var r = this.detector.push({ x: ret.x, y: ret.y, z: ret.z }, now)
+    var r = this.detector.push({ x: ret.x, y: ret.y, z: ret.z }, Date.now())
 
-    if (r.ready && this.detector.count === 0 && this.seconds < 3) {
-      this.tip = '开始深蹲'
-    }
     if (r.counted) {
       this.count = this.detector.count
-      this.ring = this.count % 20 / 20
-      vibrator.vibrate({ type: 'light' })
+      this.ringPct = Math.round((this.count % 20) / 20 * 100)
+      this.vibrate('light')
+      if (this.count % 10 === 0) {
+        this.vibrate('heavy')
+        this.tip = this.count + ' 次！'
+      }
     } else if (r.ready) {
-      this.ring = r.progress
+      this.ringPct = Math.round(r.progress * 100)
+    }
+
+    if (r.ready) {
+      this.stateText = r.state === 'bottom' ? '下蹲' : '站立'
     }
   },
 
@@ -173,7 +201,7 @@ export default {
       self.seconds += 1
       var m = Math.floor(self.seconds / 60)
       var s = self.seconds % 60
-      self.timeText = (m < 10 ? '0' + m : m) + ':' + (s < 10 ? '0' + s : s)
+      self.timeText = pad(m) + ':' + pad(s)
     }, 1000)
   },
 
@@ -185,17 +213,18 @@ export default {
   },
 
   saveSession() {
-    if (this.count <= 0) return
     this.todayCount += this.count
+    var self = this
+    var payload = { key: dayKey(Date.now()), count: this.todayCount, at: Date.now() }
     try {
-      storage.setSync({
-        key: 'sq_today',
-        value: { count: this.todayCount, at: Date.now() },
-        success: function () { console.log('已保存') },
-        fail: function (msg, code) { console.error('保存失败', msg, code) }
+      storage.set({
+        key: KEY_TODAY,
+        value: payload,
+        success: function () { console.log('已保存今日 ' + self.todayCount + ' 次') },
+        fail: function (msg, code) { console.error('保存失败 ' + msg + ' ' + code) }
       })
     } catch (e) {
-      console.error('storage 异常', e)
+      console.error('storage 异常 ' + e)
     }
   }
 }
@@ -207,7 +236,7 @@ export default {
   align-items: center;
   justify-content: space-between;
   background-color: #0b0c0f;
-  padding: 12px 10px 16px;
+  padding: 10px 8px 14px;
   width: 100%;
   height: 100%;
 }
@@ -228,7 +257,7 @@ export default {
 .mode {
   font-size: 10px;
   color: #8a8f99;
-  padding: 2px 6px;
+  padding: 3px 7px;
   border-radius: 8px;
   background-color: #1f232b;
 }
@@ -236,11 +265,10 @@ export default {
 .count-wrap {
   flex-direction: row;
   align-items: baseline;
-  margin-top: 6px;
 }
 
 .count {
-  font-size: 46px;
+  font-size: 52px;
   color: #ffffff;
   font-weight: bold;
 }
@@ -254,7 +282,7 @@ export default {
 .hint {
   font-size: 10px;
   color: #6b7280;
-  margin-top: 2px;
+  text-align: center;
   height: 14px;
 }
 
@@ -263,7 +291,6 @@ export default {
   height: 4px;
   border-radius: 2px;
   background-color: #1f232b;
-  margin-top: 6px;
 }
 
 .bar-fill {
@@ -276,7 +303,7 @@ export default {
   flex-direction: row;
   justify-content: space-between;
   width: 100%;
-  margin-top: 6px;
+  min-height: 14px;
 }
 
 .stat {
@@ -286,31 +313,21 @@ export default {
 
 .btn {
   width: 100%;
-  border-radius: 24px;
+  border-radius: 26px;
   align-items: center;
   justify-content: center;
-  padding: 9px 0;
-  margin-top: 6px;
-}
-
-.btn.main {
+  padding: 10px 0;
   background-color: #c6f24e;
 }
 
-.btn.main text {
+.btn text {
   font-size: 15px;
   color: #10120a;
   font-weight: bold;
 }
 
-.btn.ghost {
-  background-color: transparent;
-  border-width: 1px;
-  border-color: #3a3f49;
-}
-
-.btn.ghost text {
-  font-size: 12px;
-  color: #8a8f99;
+.foot {
+  font-size: 9px;
+  color: #4a4f58;
 }
 </style>

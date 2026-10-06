@@ -5,9 +5,13 @@ project.private.config.json
 # node
 node_modules/
 
-# Vela 快应用构建产物
+# Vela 快应用构建产物与签名
 band/dist/
+band/build/
 band/.aiot-ide/
+band/sign/
+band/.vessel/
+*.rpk
 
 # 编辑器 / 系统
 .DS_Store
