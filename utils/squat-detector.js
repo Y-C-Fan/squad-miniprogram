@@ -128,6 +128,7 @@ SquatDetector.prototype.reset = function () {
   this.tilt = 0
   this.signal = 0
   this.linear = 0
+  this.absoluteTilt = 0
   this._resetSignalState()
   return this
 }
@@ -202,6 +203,11 @@ SquatDetector.prototype.push = function (a, ts) {
 
   var cfg = this.cfg
 
+  // 绝对倾角 = 当前重力方向与"世界竖直方向（+z）"的夹角。
+  // 用于判断"人到底是站直了还是在蹲着"，是零点漂移补偿的安全前提：
+  // 只有人真的站直（绝对倾角也小）时，才允许基准跟着重力慢慢走。
+  this.absoluteTilt = Math.acos(clamp(g.z, -1, 1)) * RAD_TO_DEG
+
   // ── 4) 校准：要求"连续静止"达标才锁定基准方向。
   //
   //    为什么必须这么设计（真机踩过的坑）：
@@ -248,9 +254,16 @@ SquatDetector.prototype.push = function (a, ts) {
 
   // ── 5) 施密特触发状态机
   if (this.state === 'top') {
-    // 只在"站着不动"时让基准极慢地跟随重力，抵消手机在口袋里慢慢滑动造成的零点漂移。
-    // 关键是必须同时约束线加速度很小 —— 否则训练过程中基准会被平均掉，信号幅度越蹲越小。
-    if (sig < cfg.exit && this.linear < 0.4) {
+    // 零点漂移补偿：抵消手机在口袋里慢慢滑动造成的基准偏移。
+    //
+    // 三个必要约束，缺一不可（第二个是真机/Linux 仿真各暴露一次 bug）：
+    //  1) 相对基准的倾角要小   —— 否则正在深蹲时会被当成漂移
+    //  2) 相对重力方向的倾角也要小 —— ★ 这是关键。
+    //     只看条件 1 时，基准会一路跟着重力跑到"深蹲底部"，把整个幅度吸收掉；
+    //     下次倾角回落时相对基准瞬间变 0 → 立刻触发退出 → 同一个深蹲被数两次。
+    //     实测干净波形 3 蹲数出 5 个，根因就是这里。
+    //  3) 线加速度要小           —— 传感器在抖的时候不该更新基准
+    if (sig < cfg.exit && this.linear < 0.4 && this.absoluteTilt < cfg.exit) {
       this.baseline = unit(lerpVec(this.baseline, g, alphaFor(dt, 15)))
     }
 
