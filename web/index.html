@@ -219,13 +219,24 @@ var TILT_PRESET = {
  *    手腕上摆动会污染信号，所以手环版默认用这个模式
  *    （塞不进裤袋，位移信号反而比倾角稳）。
  */
+/**
+ * 垂直位移模式的阈值（单位：米）—— **手调，非标定值**
+ *
+ * 为什么不用标定结果：标定在「小幅屈伸」约束下给出的最优解是
+ * enter=0.235m，代价是最差场景 0%（浅蹲 25cm 几乎全漏）—— **无可行解**。
+ *
+ * 原因是信号的结构性局限，不是调参问题：
+ *   · 防误计小幅屈伸（3~10cm）→ enter 必须 > 10cm
+ *   · 不漏浅蹲（25cm）        → enter 必须 < 25cm
+ * 两者只在 10~25cm 区间才可能同时满足，而位移信号**没有别的旋钮可调**。
+ *
+ * 对比倾角信号：它是**归一化**的（站直=0°），3cm 小幅屈伸只产生 ~2°，
+ * 45cm 深蹲产生 45°，天然分得开。
+ *
+ * 所以这里取中间值 0.12，在"漏一点"和"误计一点"之间平衡。
+ * **能用 tilt 就别用 lift。** 详见 docs/CALIBRATION.md 第七节。
+ */
 var LIFT_PRESET = {
-  // ⚠️ 这里的 enter 曾被标定优化到 0.025m，但在 simulate.js 的
-  // 「手持微晃 5cm」场景里被数成 12 次 —— 说明标定目标函数当时
-  // ⚠️ 这里的 enter 曾被标定优化到 0.025m，但在 simulate.js 的
-  // 「手持微晃 5cm」场景里被数成 12 次 —— 说明标定目标函数当时
-  // 缺少「小幅晃动」约束。现已把 sway 场景加入 calibrate.py 的目标函数，
-  // 重新标定后再更新此处。详见 docs/CALIBRATION.md。
   low:    { enter: 0.18, exit: 0.11, minDownMs: 260, maxDownMs: 4500, minMotion: 0.6, minGapMs: 1000 },
   medium: { enter: 0.12, exit: 0.07, minDownMs: 200, maxDownMs: 4500, minMotion: 0.5, minGapMs: 800 },
   high:   { enter: 0.08, exit: 0.045, minDownMs: 150, maxDownMs: 4500, minMotion: 0.4, minGapMs: 550 }
