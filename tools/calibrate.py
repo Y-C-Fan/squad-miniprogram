@@ -360,24 +360,58 @@ def make_signal(sc: Scenario, reps: int, rng: np.random.Generator, mode: str) ->
 
 
 def make_interference(sc: Scenario, seconds: float, rng: np.random.Generator, mode: str):
-    """不该被计数的干扰：日常活动 / 走路 / 坐下 / 捡东西"""
+    """
+    不该被计数的干扰：日常活动 / 走路 / 坐下 / 捡东西 / 手臂小幅晃动
+
+    ⚠️ 这一组的强度直接决定标定出的 enter 阈值。
+    第一版标定把 enter 优化到 0.025m（2.5cm），结果 simulate.js 里的
+    「手持微晃 5cm」被数成 12 次 —— 因为这里的走路起伏只有 2~6cm，
+    比 5cm 晃动还弱，标定根本没约束住这个场景。
+    所以这里加入了「小幅晃动」档（8~12cm 的周期性起伏），
+    覆盖 simulate.js 里的同类场景，保证两套测试互为验证。
+    """
     n = int(seconds / DT)
     t = np.arange(n) * DT
     out = np.zeros((n, 3))
     out[:, 0] = rng.normal(0, sc.noise, n)
     out[:, 1] = rng.normal(0, sc.noise, n)
     out[:, 2] = G + rng.normal(0, sc.noise, n)
+
     if mode == 'tilt':
-        # 走动时的周期性晃动，幅度小于深蹲
+        # 走动时的周期性晃动，幅度明显小于深蹲
         w = sc.depth_deg * rng.uniform(0.25, 0.55)
         th = np.radians(w * (np.sin(2 * np.pi * 1.8 * t) * 0.6 + np.sin(2 * np.pi * 3.6 * t) * 0.4))
         out[:, 0] += G * np.sin(th)
         out[:, 2] += G * np.cos(th) - G
     else:
-        # 走路时的垂直起伏，约 3~5cm
+        # 走路垂直起伏 2~6cm
         w = rng.uniform(0.02, 0.06)
-        ph = 2 * np.pi * 1.8 * t
-        disp = w * np.sin(ph)
+        disp = w * np.sin(2 * np.pi * 1.8 * t)
+        out[:, 2] += np.gradient(np.gradient(disp, DT), DT)
+    return out
+
+
+def make_sway(seconds: float, amp_m: float, rng: np.random.Generator, mode: str, freq: float = 1.2):
+    """
+    「小幅晃动」：模拟站在原地小幅摆动、扶把手、深蹲中途调整。
+    与深蹲的区别是**幅度小**，但节律和深蹲相似 —— 这是最难防的误计来源，
+    也是标定里必须显式约束的场景（幅度 8~12cm）。
+    """
+    n = int(seconds / DT)
+    t = np.arange(n) * DT
+    out = np.zeros((n, 3))
+    out[:, 0] = rng.normal(0, 0.02, n)
+    out[:, 1] = rng.normal(0, 0.02, n)
+    out[:, 2] = G + rng.normal(0, 0.02, n)
+
+    if mode == 'tilt':
+        # 摆动幅度换算成角度：手环在手腕上，30cm 摆幅约等于 17°
+        deg = amp_m / 0.45 * 45.0 * 0.35
+        th = np.radians(deg * np.sin(2 * np.pi * freq * t))
+        out[:, 0] += G * np.sin(th)
+        out[:, 2] += G * np.cos(th) - G
+    else:
+        disp = amp_m * np.sin(2 * np.pi * freq * t)
         out[:, 2] += np.gradient(np.gradient(disp, DT), DT)
     return out
 
@@ -385,13 +419,13 @@ def make_interference(sc: Scenario, seconds: float, rng: np.random.Generator, mo
 # ─────────────────────────── 评估 ───────────────────────────
 
 def evaluate(cfg: dict, calib_still: float, mode: str, reps_per_case: int, n_trials: int, seed: int = 0):
-    """在全部场景上评估一组阈值。返回 (最差准确率, 平均准确率, 漏计, 误计)"""
+    """在全部场景上评估一组阈值。返回 (最差准确率, 平均准确率, 漏计, 误计, 总次数)"""
     rng = np.random.default_rng(seed)
     per_scenario = []
     misses = 0.0
-    falses = 0.0
     total_reps = 0
     total_fp = 0
+    sway_fp = 0
 
     for sc in SCENARIOS:
         accs = []
@@ -407,7 +441,7 @@ def evaluate(cfg: dict, calib_still: float, mode: str, reps_per_case: int, n_tri
             total_reps += truth
         per_scenario.append(np.mean(accs))
 
-    # 误计：干扰信号里数出了多少次
+    # ── 误计一：日常活动 / 走路 ──
     for sc in SCENARIOS:
         for t in range(max(2, n_trials // 2)):
             sig = make_interference(sc, 20.0, rng, mode)
@@ -415,11 +449,31 @@ def evaluate(cfg: dict, calib_still: float, mode: str, reps_per_case: int, n_tri
             for i in range(len(sig)):
                 det.push(tuple(sig[i]), i * DT * 1000.0)
             total_fp += det.count
-    falses = float(total_fp)
 
+    # ── 误计二：小幅屈伸（最难的场景，必须和 simulate.js 的定义一致）──
+    #
+    # ⚠️ 这里的定义必须和 tools/simulate.js 的「干扰 手持微晃5cm」**完全一致**：
+    #     幅度 5cm、周期 1.2 秒、**逐次完整屈伸**（不是持续正弦）。
+    # 第一版标定用持续正弦 + 8~12cm 幅度，漏掉了这个形状：
+    # 「持续小幅摆动」和「小幅但完整的屈伸」是两回事 ——
+    # 后者的加速度曲线更像真深蹲，enter=0.025 会被它触发 12 次。
+    # 两套测试互为验证，场景定义必须对齐。
+    for amp in (0.03, 0.05, 0.07, 0.10):
+        for period in (1.0, 1.2, 1.5, 2.0):
+            sig, _ = make_signal(
+                Scenario('微晃', depth_deg=0, depth_m=amp, period=period,
+                          asym=0.2, drift_amp=0, drift_period=12.0,
+                          jitter=0.30, impact=0.10, noise=0.02),
+                12, rng, mode)
+            det = SquatDetector(mode=mode, cfg=cfg, calib_still=calib_still)
+            for i in range(len(sig)):
+                det.push(tuple(sig[i]), i * DT * 1000.0)
+            sway_fp += det.count
+
+    falses = float(total_fp)
     worst = float(min(per_scenario)) if per_scenario else 0.0
     mean = float(np.mean(per_scenario)) if per_scenario else 0.0
-    return worst, mean, misses, falses, total_reps
+    return worst, mean, misses, falses, total_reps, sway_fp
 
 
 def score(cfg, calib_still, mode, reps, trials):
@@ -448,8 +502,13 @@ def _eval_batch(cands, mode, reps, trials, pool):
 
 
 def _mk_score(res):
-    worst, mean, misses, falses, total_reps = res
-    return worst * 3.0 + mean - falses * 0.25
+    """
+    评分：最差场景准确率优先，误计重罚。
+    sway_fp（小幅晃动误计）权重最高 —— 它是「节律像深蹲但幅度小」的场景，
+    也就是用户站着晃两下数字就跳，最伤体感。
+    """
+    worst, mean, misses, falses, total_reps, sway_fp = res
+    return worst * 3.0 + mean - falses * 0.5 - sway_fp * 1.5
 
 
 def search(mode: str, reps: int, trials: int, quick: bool, pool):
@@ -480,19 +539,21 @@ def search(mode: str, reps: int, trials: int, quick: bool, pool):
     res = _eval_batch(cands, mode, reps, trials, pool)
     scored = [(_mk_score(r), c, r) for r, c in zip(res, cands)]
     scored.sort(key=lambda x: -x[0])
-    top = scored[:8]
+    top = scored[:3]          # 只保留前 3 名做细化，8 名会组合爆炸
     print('  阶段一完成，用时 {:.0f}s，最佳 score={:.3f}'.format(time.time() - t0, top[0][0]))
 
-    # ── 阶段二：在前 8 名附近细化 ──
+    # ── 阶段二：在前 3 名附近细化 ──
+    # 网格要控制规模：3 候选 × 4(enter) × 4(ratio) × 4(mm) × 3(calib) ≈ 576 组，
+    # 而不是上万组 —— 细化网格太密纯属浪费算力，阈值本身不需要那么精细。
     fine = []
     for sc0, (cfg0, cs0) in [(t[0], t[1]) for t in top]:
         e0, x0, mm0 = cfg0['enter'], cfg0['exit'], cfg0['minMotion']
-        de = (1.0 if mode == 'tilt' else 0.012) if quick else (0.5 if mode == 'tilt' else 0.005)
-        dr = 0.03 if quick else 0.02
-        for e in np.arange(max(5 if mode == 'tilt' else 0.02, e0 - de * 2), e0 + de * 2.1, de * 0.5):
-            for r in np.arange(max(0.3, x0 / max(1e-9, e0) - dr * 2), min(0.92, x0 / max(1e-9, e0) + dr * 2.1), dr * 0.4):
-                for mm in np.arange(max(0.2, mm0 - 0.25), mm0 + 0.26, 0.1):
-                    for cs in np.arange(max(0.2, cs0 - 0.3), cs0 + 0.31, 0.15):
+        de = (1.2 if mode == 'tilt' else 0.015) if quick else (0.8 if mode == 'tilt' else 0.01)
+        dr = 0.04
+        for e in np.linspace(max(5 if mode == 'tilt' else 0.02, e0 - de), e0 + de, 4):
+            for r in np.arange(max(0.35, x0 / max(1e-9, e0) - dr), min(0.9, x0 / max(1e-9, e0) + dr * 1.2), dr * 0.5):
+                for mm in np.arange(max(0.2, mm0 - 0.2), mm0 + 0.21, 0.2):
+                    for cs in np.arange(max(0.25, cs0 - 0.25), cs0 + 0.26, 0.25):
                         cfg = dict(base)
                         cfg['enter'] = float(e)
                         cfg['exit'] = float(e * r)
@@ -519,8 +580,8 @@ def search(mode: str, reps: int, trials: int, quick: bool, pool):
     }
     print('\n  [{}] 最优 score={:.3f}'.format(mode, bs))
     print(json.dumps(best, indent=2, ensure_ascii=False))
-    print('  最差场景准确率 {:.1%}  平均 {:.1%}  漏计 {:.0f}/{}  干扰误计 {:.0f}'
-          .format(bres[0], bres[1], bres[2], bres[4], bres[3]))
+    print('  最差场景 {:.1%}  平均 {:.1%}  漏计 {:.0f}/{}  日常误计 {:.0f}  小幅晃动误计 {:.0f}'
+          .format(bres[0], bres[1], bres[2], bres[4], bres[3], bres[5]))
     print('  用时 {:.0f} 秒\n'.format(time.time() - t0))
     return best
 

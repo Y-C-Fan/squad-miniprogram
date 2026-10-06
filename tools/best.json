@@ -1,0 +1,123 @@
+{
+  "tilt": {
+    "score": 2.958333333333333,
+    "enter": 22.8,
+    "exit": 17.556,
+    "minMotion": 0.2,
+    "calibStill": 0.25
+  },
+  "lift": {
+    "score": 4.0,
+    "enter": 0.025,
+    "exit": 0.010250000000000002,
+    "minMotion": 0.2,
+    "calibStill": 0.25
+  },
+  "_meta": {
+    "scenarios": [
+      {
+        "name": "标准蹲",
+        "depth_deg": 45,
+        "depth_m": 0.45,
+        "period": 2.0,
+        "asym": 0.2,
+        "drift_amp": 1.0,
+        "drift_period": 12.0,
+        "jitter": 0.3,
+        "impact": 0.1,
+        "noise": 0.02
+      },
+      {
+        "name": "浅蹲",
+        "depth_deg": 28,
+        "depth_m": 0.25,
+        "period": 1.8,
+        "asym": 0.3,
+        "drift_amp": 1.5,
+        "drift_period": 10.0,
+        "jitter": 0.35,
+        "impact": 0.08,
+        "noise": 0.025
+      },
+      {
+        "name": "深蹲到底",
+        "depth_deg": 62,
+        "depth_m": 0.6,
+        "period": 2.6,
+        "asym": 0.1,
+        "drift_amp": 0.8,
+        "drift_period": 14.0,
+        "jitter": 0.25,
+        "impact": 0.12,
+        "noise": 0.02
+      },
+      {
+        "name": "慢速康复蹲",
+        "depth_deg": 35,
+        "depth_m": 0.3,
+        "period": 4.0,
+        "asym": 0.4,
+        "drift_amp": 0.6,
+        "drift_period": 11.0,
+        "jitter": 0.3,
+        "impact": 0.05,
+        "noise": 0.02
+      },
+      {
+        "name": "快速爆发蹲",
+        "depth_deg": 50,
+        "depth_m": 0.5,
+        "period": 1.0,
+        "asym": 0.2,
+        "drift_amp": 1.2,
+        "drift_period": 13.0,
+        "jitter": 0.4,
+        "impact": 0.2,
+        "noise": 0.03
+      },
+      {
+        "name": "晃手臂",
+        "depth_deg": 48,
+        "depth_m": 0.45,
+        "period": 2.2,
+        "asym": 0.3,
+        "drift_amp": 2.5,
+        "drift_period": 7.0,
+        "jitter": 0.5,
+        "impact": 0.1,
+        "noise": 0.03
+      },
+      {
+        "name": "躯干前倾",
+        "depth_deg": 42,
+        "depth_m": 0.4,
+        "period": 2.0,
+        "asym": 0.2,
+        "drift_amp": 3.0,
+        "drift_period": 6.0,
+        "jitter": 0.35,
+        "impact": 0.1,
+        "noise": 0.02
+      },
+      {
+        "name": "高抬腿式",
+        "depth_deg": 55,
+        "depth_m": 0.55,
+        "period": 1.6,
+        "asym": 0.3,
+        "drift_amp": 1.0,
+        "drift_period": 9.0,
+        "jitter": 0.3,
+        "impact": 0.15,
+        "noise": 0.025
+      }
+    ],
+    "reps_per_case": 15,
+    "trials": 2,
+    "quick": true,
+    "eval_seed": 20260906,
+    "processes": 8,
+    "elapsed_sec": 493.2,
+    "note": "这是「最坏情况最优」，不是真机验证结果。仿真只能保证不出现系统性错误，最终阈值仍需真机确认。"
+  }
+}

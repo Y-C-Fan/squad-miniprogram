@@ -119,25 +119,50 @@ python tools/calibrate.py --quick   # 阈值标定（需要 numpy）
 
 ### Linux 多核跑（推荐，标定较慢）
 
+`lab` 机器（8 核）实测可用：
+
 ```bash
 scp tools/calibrate.py lab:~/squad-calibrate.py
 ssh lab
-nohup python3 squad-calibrate.py --quick --out best.json > calib.log 2>&1 &
+setsid nohup python3 -u squad-calibrate.py --quick --out best.json > calib.log 2>&1 < /dev/null &
+tail -f calib.log
 ```
+
+> **两个必须的注意点**（都踩过）：
+> 1. 用 `setsid ... < /dev/null &` 彻底脱离 SSH 会话。否则 SSH 超时后
+>    wrapper 进程会变成僵尸，**每次超时都会留下一套进程池抢核**。
+>    我踩过：21 个 python 进程抢 8 核，load 19，标定卡死。清理：
+>    `pkill -f squad-calibrate`
+> 2. 用 `python3 -u` 关掉输出缓冲，否则日志要等进程结束才可见，
+>    没法判断进度。
 
 脚本用 `multiprocessing.Pool`（8 核），评估用**固定随机种子**，保证所有候选参数面对完全相同的测试集 —— 否则结果不可比。
 
-搜索分两阶段：粗筛（粗步长快速淘汰）→ 在前 8 名附近细化。比全网格快一个量级。
+搜索分两阶段：粗筛（粗步长快速淘汰）→ 在前 3 名附近细化。细化网格要控制规模：3 候选 × 4 × 4 × 4 × 3 ≈ 480 组。第一版取前 8 名、步长又密，组合出 9945 组，跑了一小时没出结果。
 
 ### 把结果写回代码
 
-`best.json` 里的值对应 `utils/squat-detector.js` 的 `TILT_PRESET` / `LIFT_PRESET`，以及构造器的 `calibStill`。注意三处要同步：
+`best.json` 里的值对应 `utils/squat-detector.js` 的 `TILT_PRESET` / `LIFT_PRESET`，以及文件顶部的 `CALIB_STILL`。注意三处要同步：
 
 - `utils/squat-detector.js`（小程序 + 网页版构建源）
 - `band/src/common/squat-detector.js`（手环版，直接复制）
 - `tools/calibrate.py` 里的 `TILT_PRESET_BASE` / `LIFT_PRESET_BASE`（Python 等价实现）
 
 > ⚠️ 改 `squat-detector.js` 后必须跑 `node tools/build-web.js` 重新生成网页版。
+
+### ⚠️ 标定完必须跑回归
+
+**这是本项目最容易翻车的地方。** 第一轮标定给出 lift `enter=0.025`，看起来完美（8 场景 100%、误计 0），但写回 `squat-detector.js` 后 `simulate.js` 直接报：
+
+```
+FAIL 干扰 手持微晃5cm ×0   lift /medium → 12 (期望 0)
+```
+
+原因是**两套测试的场景不重叠**：标定的干扰信号只有"走路起伏 2~6cm"，而 `simulate.js` 测的是"手持小幅晃动 5cm"，后者更大、节律更像深蹲，标定时完全没考虑。
+
+修法是给 `calibrate.py` 加了 `make_sway()`，把 8~12cm 的周期性晃动显式纳入目标函数，权重还给得最高（`sway_fp * 1.5`）—— 因为它就是"站着晃两下数字就跳"，最伤体感。
+
+**所以流程是：标定 → 写回 → 跑全部 simulate/test-calibration → 有回归就说明目标函数漏了场景 → 补场景后重新标定。** 不要看到标定数字漂亮就直接写进代码。
 
 ---
 

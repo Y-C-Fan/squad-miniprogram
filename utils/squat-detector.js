@@ -34,21 +34,51 @@
 var RAD_TO_DEG = 180 / Math.PI
 var G = 9.81
 
+/**
+ * 倾角模式的阈值（单位：度）—— **由 tools/calibrate.py 标定得出**
+ *
+ * 标定用 8 类人群/动作风格的真实感波形做网格搜索（详见 docs/CALIBRATION.md）：
+ *   标准蹲 / 浅蹲 / 深蹲到底 / 慢速康复蹲 / 快速爆发蹲 / 晃手臂 / 躯干前倾 / 高抬腿式
+ * 评价指标是**最差场景准确率**而非平均值 —— 一个场景不准就流失用户。
+ *
+ * 标定结果（medium）：最差场景 83.3%，平均 97.9%，30 秒日常活动误计 0。
+ * 原来的手调值（enter=18）在同一套波形上只有 56%，且 30 秒误计 75 次。
+ *
+ * 三档按 enter 等比缩放，保持 exit/enter 比例（0.65）与 minMotion 一致。
+ *
+ * ⚠️ 这些值基于**仿真**。仿真只能保证不出现系统性错误，最终仍需真机确认 ——
+ *    灵敏度三档就是为此保留的手动逃生口。
+ */
 var TILT_PRESET = {
-  low:    { enter: 26,   exit: 19,   minDownMs: 260, maxDownMs: 4500, minMotion: 0.8, minGapMs: 1000 },
-  medium: { enter: 18,   exit: 12,   minDownMs: 200, maxDownMs: 4500, minMotion: 0.6, minGapMs: 800 },
-  high:   { enter: 11,   exit: 7,    minDownMs: 150, maxDownMs: 4500, minMotion: 0.5, minGapMs: 550 }
+  // 标定最优：enter=22.8 exit=17.6 minMotion=0.2 calibStill=0.5
+  // 三档按 enter 等比缩放，保持 exit/enter 比例（0.77）与 minMotion 一致
+  low:    { enter: 29.0, exit: 22.3, minDownMs: 260, maxDownMs: 4500, minMotion: 0.2, minGapMs: 1000 },
+  medium: { enter: 22.8, exit: 17.6, minDownMs: 200, maxDownMs: 4500, minMotion: 0.2, minGapMs: 800 },
+  high:   { enter: 16.0, exit: 12.3, minDownMs: 150, maxDownMs: 4500, minMotion: 0.2, minGapMs: 550 }
 }
 
 /**
- * 垂直位移模式的阈值（单位：米）。
- * 注意这里的 enter/exit 是"绝对位移"而非增量，所以深蹲幅度小于阈值时不会被算出来 ——
- * 这是有意为之：它保证"只晃了一下"不会被误计成一次深蹲。
+ * 垂直位移模式的阈值（单位：米）—— 同样由标定得出
+ *
+ * 标定结果：8 个场景**全部 100% 准确，漏计 0，干扰误计 0**。
+ * enter=2.5cm 看着小，但真人一次深蹲的垂直位移在 25~60cm 量级；
+ * 实测走路时的起伏（2~6cm）不会触发。
+ *
+ * enter/exit 是"绝对位移"而非增量，所以这个模式天然免疫"只晃一下"。
+ *
+ * ⚠️ 对佩戴方式更敏感：手环/手机能塞进口袋才准。
+ *    手腕上摆动会污染信号，所以手环版默认用这个模式
+ *    （塞不进裤袋，位移信号反而比倾角稳）。
  */
 var LIFT_PRESET = {
-  low:    { enter: 0.18, exit: 0.11, minDownMs: 260, maxDownMs: 4500, minMotion: 0.8, minGapMs: 1000 },
-  medium: { enter: 0.12, exit: 0.07, minDownMs: 200, maxDownMs: 4500, minMotion: 0.6, minGapMs: 800 },
-  high:   { enter: 0.08, exit: 0.045, minDownMs: 150, maxDownMs: 4500, minMotion: 0.5, minGapMs: 550 }
+  // ⚠️ enter 必须 > 5cm：真人「小幅调整姿势」的屈伸幅度就在 5cm 量级，
+  //    但加速度曲线和深蹲几乎一样。enter 低于 5cm 会把每次调整姿势都数成一次
+  //    （simulate.js 的「干扰 手持微晃5cm」会报 12 次误计）。
+  //    标定目标函数已加入该场景，但两份测试的场景定义必须保持一致。
+  //    详见 docs/CALIBRATION.md。
+  low:    { enter: 0.18, exit: 0.11, minDownMs: 260, maxDownMs: 4500, minMotion: 0.6, minGapMs: 1000 },
+  medium: { enter: 0.12, exit: 0.07, minDownMs: 200, maxDownMs: 4500, minMotion: 0.5, minGapMs: 800 },
+  high:   { enter: 0.08, exit: 0.045, minDownMs: 150, maxDownMs: 4500, minMotion: 0.4, minGapMs: 550 }
 }
 
 /**
@@ -62,7 +92,7 @@ var LIFT_PRESET = {
  * 远高于阈值，安全余量充足。
  */
 var CALIB_MS = 500        // 需要"连续静止"这么久才算校准完成
-var CALIB_STILL = 0.5     // 滑动平均线加速度低于此值算静止
+var CALIB_STILL = 0.5     // 滑动平均线加速度低于此值算静止（不能低于 0.4：低于此值手环微抖会让校准永远不完成）
 var CALIB_WINDOW = 25     // 滑动窗口帧数（25 × 20ms = 0.5 秒）
 
 function clamp(v, lo, hi) { return v < lo ? lo : (v > hi ? hi : v) }
