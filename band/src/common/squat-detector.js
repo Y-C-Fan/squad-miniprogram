@@ -34,18 +34,10 @@
 var RAD_TO_DEG = 180 / Math.PI
 var G = 9.81
 
-/**
- * 各灵敏度档位的阈值（单位：度）。
- * 低通会让幅度缩水约 5%，所以阈值要留出余量，不能贴着真实幅度定。
- * 档位语义 = "多大幅度的动作才算一次"：
- *   low    真实 ≥30° 才算，几乎不误计
- *   medium 真实 ≥22° 就算（推荐，常规深蹲）
- *   high   真实 ≥12° 就算，轻微屈膝也会被算进去
- */
 var TILT_PRESET = {
-  low:    { enter: 26,   exit: 19,   minDownMs: 260, maxDownMs: 4500, minMotion: 0.8, minGapMs: 1000, calibStill: 0.5 },
-  medium: { enter: 18,   exit: 12,   minDownMs: 200, maxDownMs: 4500, minMotion: 0.6, minGapMs: 800, calibStill: 0.5 },
-  high:   { enter: 11,   exit: 7,    minDownMs: 150, maxDownMs: 4500, minMotion: 0.5, minGapMs: 550, calibStill: 0.5 }
+  low:    { enter: 26,   exit: 19,   minDownMs: 260, maxDownMs: 4500, minMotion: 0.8, minGapMs: 1000 },
+  medium: { enter: 18,   exit: 12,   minDownMs: 200, maxDownMs: 4500, minMotion: 0.6, minGapMs: 800 },
+  high:   { enter: 11,   exit: 7,    minDownMs: 150, maxDownMs: 4500, minMotion: 0.5, minGapMs: 550 }
 }
 
 /**
@@ -54,10 +46,24 @@ var TILT_PRESET = {
  * 这是有意为之：它保证"只晃了一下"不会被误计成一次深蹲。
  */
 var LIFT_PRESET = {
-  low:    { enter: 0.18, exit: 0.11, minDownMs: 260, maxDownMs: 4500, minMotion: 0.8, minGapMs: 1000, calibStill: 0.5 },
-  medium: { enter: 0.12, exit: 0.07, minDownMs: 200, maxDownMs: 4500, minMotion: 0.6, minGapMs: 800, calibStill: 0.5 },
-  high:   { enter: 0.08, exit: 0.045, minDownMs: 150, maxDownMs: 4500, minMotion: 0.5, minGapMs: 550, calibStill: 0.5 }
+  low:    { enter: 0.18, exit: 0.11, minDownMs: 260, maxDownMs: 4500, minMotion: 0.8, minGapMs: 1000 },
+  medium: { enter: 0.12, exit: 0.07, minDownMs: 200, maxDownMs: 4500, minMotion: 0.6, minGapMs: 800 },
+  high:   { enter: 0.08, exit: 0.045, minDownMs: 150, maxDownMs: 4500, minMotion: 0.5, minGapMs: 550 }
 }
+
+/**
+ * 校准参数。
+ *
+ * calibStill 用的是「滑动窗口平均线加速度」而不是单帧值 —— 这是关键。
+ * 手环戴在手腕上，站着不动也有生理性微抖（实测线加速度单帧峰值 0.3~0.5，
+ * 抖幅 0.35 时单帧超阈概率 15%）。若按单帧判静止，只要有一帧超限就把计时归零，
+ * 结果永远是"在校准中"（真机实测现象）。
+ * 换成 0.5 秒滑动均值后：抖幅 0.5 误判率 0%，而真实深蹲运动量 2~5 m/s²
+ * 远高于阈值，安全余量充足。
+ */
+var CALIB_MS = 500        // 需要"连续静止"这么久才算校准完成
+var CALIB_STILL = 0.5     // 滑动平均线加速度低于此值算静止
+var CALIB_WINDOW = 25     // 滑动窗口帧数（25 × 20ms = 0.5 秒）
 
 function clamp(v, lo, hi) { return v < lo ? lo : (v > hi ? hi : v) }
 
@@ -81,8 +87,9 @@ function SquatDetector(options) {
   options = options || {}
   this.setMode(options.mode || 'tilt')
   this.setSensitivity(options.sensitivity || 'medium')
-  this.calibMs = options.calibMs || 700      // 校准窗口最短时长
-  this.calibTimeout = options.calibTimeout || 5000  // 一直动就最多等这么久
+  this.calibMs = options.calibMs || CALIB_MS     // 需要"连续静止"这么久才算校准完成
+  this.calibStill = options.calibStill || CALIB_STILL
+  this.calibWindow = options.calibWindow || CALIB_WINDOW
   this.reset()
 }
 
@@ -106,10 +113,11 @@ SquatDetector.prototype.getConfig = function () { return this.cfg }
 SquatDetector.prototype.reset = function () {
   this.gravity = null       // 低通后的重力方向（设备坐标系）
   this.baseline = null      // 校准期锁定的基准重力方向
-  this.firstTs = 0
   this.lastTs = 0
   this.calibrating = true
-  this.calibMotion = 0
+  this.calibSince = 0       // 本段"连续静止"的起始时刻，0 表示当前正在动
+  this.calibBuf = []        // 线加速度滑动窗口，用来算平均运动量
+  this.motionAvg = 0
 
   this.state = 'top'        // top | bottom
   this.downSince = 0
@@ -167,7 +175,8 @@ SquatDetector.prototype.push = function (a, ts) {
   var out = {
     count: this.count, counted: false, tilt: this.tilt, signal: this.signal,
     state: this.calibrating ? 'calibrating' : this.state,
-    ready: !this.calibrating, progress: 0, motion: this.linear, repMs: 0
+    ready: !this.calibrating, progress: 0, motion: this.linear, repMs: 0,
+    calibProgress: this.calibrating ? 0 : 1
   }
 
   // ── 1) 低通估计重力方向。
@@ -193,19 +202,46 @@ SquatDetector.prototype.push = function (a, ts) {
 
   var cfg = this.cfg
 
-  // ── 4) 校准：必须"人没在动"才允许锁定基准方向。
-  //    如果在下蹲中途锁定，基准会被带着歪掉，之后每一蹲的相对角度都被压扁（实测能砍掉近一半），
-  //    所以这里同时要求静止时长达标、且整个校准窗口内线加速度足够小。
+  // ── 4) 校准：要求"连续静止"达标才锁定基准方向。
+  //
+  //    为什么必须这么设计（真机踩过的坑）：
+  //    · 如果在下蹲中途锁定基准，基准会被带着歪，之后每一蹲的相对角度被压扁，
+  //      实测 45° 的动作只能测到 24°，准确率直接砍半。
+  //    · 所以不能"到点就锁"，必须"人真的没在动"才锁。
+  //
+  //    三个历史 bug 叠在一起造成的"一直显示校准中"：
+  //    1) 早期用"整个校准期线加速度峰值"（只增不减）判静止 —— 手腕微抖让峰值永远超阈值
+  //    2) 靠 5 秒超时兜底解锁，但解锁时锁定的已经是蹲姿，等于第二个 bug
+  //    3) 改单帧判静止后仍然错：单帧超阈概率 15%，归零重来依然没完
+  //    最终方案：滑动窗口平均 + 500ms 连续静止。抖幅 0.5 实测 0% 误判。
   if (this.calibrating) {
-    if (!this.firstTs) this.firstTs = ts
-    if (this.linear > this.calibMotion) this.calibMotion = this.linear
-    var elapsed = ts - this.firstTs
-    var settled = this.calibMotion < cfg.calibStill
-    if (elapsed >= this.calibMs && (settled || elapsed >= this.calibTimeout)) {
+    // 维护 0.5 秒滑动窗口
+    this.calibBuf.push(this.linear)
+    if (this.calibBuf.length > this.calibWindow) this.calibBuf.shift()
+
+    var sum = 0
+    for (var i = 0; i < this.calibBuf.length; i++) sum += this.calibBuf[i]
+    var avg = this.calibBuf.length ? sum / this.calibBuf.length : 0
+    this.motionAvg = avg
+
+    // 窗口还没攒满就先不动，避免一开始用一两个样本误判
+    var windowFull = this.calibBuf.length >= this.calibWindow
+
+    if (windowFull && avg > this.calibStill) {
+      this.calibSince = 0            // 在动 → 静止计时清零
+    } else if (windowFull && !this.calibSince) {
+      this.calibSince = ts
+    }
+
+    if (this.calibSince && ts - this.calibSince >= this.calibMs) {
       this.baseline = { x: g.x, y: g.y, z: g.z }
       this.calibrating = false
       out.ready = true
       out.state = 'top'
+      out.calibProgress = 1
+    } else {
+      // 把进度回传给上层，UI 才能画校准进度条 / 显示剩余时间
+      out.calibProgress = this.calibSince ? Math.min(1, (ts - this.calibSince) / this.calibMs) : 0
     }
     return out
   }

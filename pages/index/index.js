@@ -56,6 +56,7 @@ Page({
     paused: false,
     resting: false,
     phase: 'idle',              // idle | calibrating | training | rest
+    calibPct: 0,               // 校准进度 0~100
     count: 0,
     seconds: 0,
     timeText: '00:00',
@@ -263,7 +264,7 @@ Page({
 
     this.setData({
       running: true, paused: false, resting: false,
-      phase: 'calibrating',
+      phase: 'calibrating', calibPct: 0,
       count: 0, seconds: 0, timeText: '00:00', calories: 0,
       restLeft: 0, curSet: 0,
       tip: '校准中，请站立不动…'
@@ -423,8 +424,15 @@ Page({
     var now = Date.now()
     var r = this.detector.push({ x: res.x, y: res.y, z: res.z }, now)
 
-    if (r.ready && this.data.phase === 'calibrating') {
-      this.setData({ phase: 'training', tip: '开始深蹲' })
+    if (r.ready) {
+      if (this.data.phase === 'calibrating') {
+        this.setData({ phase: 'training', tip: '开始深蹲' })
+      }
+    } else if (this.data.phase === 'calibrating') {
+      // 把校准进度和当前运动量显式画出来。
+      // 否则用户只会看到一句"校准中"然后一直等，完全不知道为什么不动。
+      var pct = Math.round(r.calibProgress * 100)
+      if (pct !== this.data.calibPct) this.setData({ calibPct: pct })
     }
     if (r.counted) this.onRep()
 

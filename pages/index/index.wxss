@@ -76,6 +76,41 @@
   color: rgba(255, 255, 255, .5);
 }
 
+/* 校准区 */
+.calib {
+  margin: 20rpx 0 0;
+}
+
+.calib-track {
+  height: 8rpx;
+  border-radius: 4rpx;
+  background: #1f232b;
+  overflow: hidden;
+}
+
+.calib-fill {
+  height: 100%;
+  border-radius: 4rpx;
+  background: #ff6b35;
+  transition: width .1s linear;
+}
+
+.calib-text {
+  display: block;
+  margin-top: 10rpx;
+  font-size: 24rpx;
+  color: #ff9a78;
+  text-align: center;
+}
+
+.calib-sub {
+  display: block;
+  margin-top: 4rpx;
+  font-size: 21rpx;
+  color: rgba(255, 255, 255, .32);
+  text-align: center;
+}
+
 /* 模式参数卡 */
 .plan {
   margin-top: 28rpx;

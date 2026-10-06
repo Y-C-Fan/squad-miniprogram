@@ -24,6 +24,13 @@ body{
 }
 .seg button.on{background:#c6f24e;color:#10120a;font-weight:600}
 
+.calib{display:none;width:100%;flex-direction:column;align-items:center;margin:8px 0 0}
+.calib.on{display:flex}
+.calib-track{width:100%;height:4px;border-radius:2px;background:#1f232b;overflow:hidden}
+.calib-fill{height:100%;width:0;border-radius:2px;background:#ff6b35;transition:width .1s linear}
+.calib-text{font-size:11px;color:#ff9a78;margin-top:5px}
+.calib-sub{font-size:10px;color:rgba(255,255,255,.32);margin-top:2px}
+
 .stage{position:relative;width:min(78vw,300px);aspect-ratio:1;margin:10px auto 6px}
 canvas{position:absolute;inset:0;width:100%;height:100%}
 .ctr{position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:2px}
@@ -95,6 +102,12 @@ button.ghost{
     <button class="on" data-m="free">自由</button>
     <button data-m="target">目标</button>
     <button data-m="hiit">HIIT</button>
+  </div>
+
+  <div class="calib" id="calib">
+    <div class="calib-track"><div class="calib-fill" id="calibFill"></div></div>
+    <div class="calib-text" id="calibText">站着别动 · 校准 0%</div>
+    <div class="calib-sub" id="calibSub">手臂有晃动会自动重新计时</div>
   </div>
 
   <div class="stage">
@@ -187,8 +200,27 @@ function onAcc(a){
   var r=det.push({x:a.x,y:a.y,z:a.z}, Date.now());
   if(r.counted) onRep();
   if(r.ready){
+    if(calibOn){
+      calibOn=false;
+      calibEl.classList.remove('on');
+      tipEl.textContent='校准完成，开始深蹲';
+    }
     var p=ringProg(r.progress);
     if(Math.abs(p-lastRing)>0.02){ lastRing=p; draw(p); }
+  }else{
+    // 显式展示校准进度 + 运动量，否则用户只看到一句"校准中"却不知道为什么不动
+    if(!calibOn){ calibOn=true; calibEl.classList.add('on'); }
+    var pct=Math.round(r.calibProgress*100);
+    calibFill.style.width=pct+'%';
+    calibText.textContent='站着别动 · 校准 '+pct+'%';
+    var avg=det.motionAvg;
+    if(avg>0.5){
+      calibSub.textContent='检测到晃动，平均运动量 '+avg.toFixed(2)+'（阈值 0.5）';
+      calibSub.style.color='#ff9a78';
+    }else{
+      calibSub.textContent='很好，保持不动';
+      calibSub.style.color='rgba(255,255,255,.32)';
+    }
   }
   if(cfg.debug){
     dbgEl.textContent='倾角 '+Math.round(r.tilt)+'° · 位移 '+r.displacement.toFixed(2)+'m · 运动量 '+r.motion.toFixed(1)+' · '+r.state;
@@ -235,6 +267,8 @@ function tick(){
 }
 
 var numEl=$('num'), tipEl=$('tip'), tEl=$('t'), cEl=$('c'), sEl=$('s'), dbgEl=$('dbg');
+var calibEl=$('calib'), calibFill=$('calibFill'), calibText=$('calibText'), calibSub=$('calibSub');
+var calibOn=false;
 var mode='free';
 
 $('go').addEventListener('click', function(){
@@ -243,7 +277,10 @@ $('go').addEventListener('click', function(){
   running=true; count=0; seconds=0; lastRing=-1; resting=false; curSet=0;
   startedAt=Date.now();
   numEl.textContent='0'; tEl.textContent='00:00'; cEl.textContent='0.0';
-  tipEl.textContent='校准中，站着别动…';
+  tipEl.textContent='站着别动 1 秒完成校准';
+  calibOn=true; calibEl.classList.add('on');
+  calibFill.style.width='0%'; calibText.textContent='站着别动 · 校准 0%';
+  calibSub.textContent='手臂有晃动会自动重新计时'; calibSub.style.color='rgba(255,255,255,.32)';
   this.textContent='训练中';
   this.classList.add('stop');
   $('rst').style.display='block';

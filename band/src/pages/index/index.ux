@@ -12,7 +12,15 @@
 
     <text class="hint">{{ tip }}</text>
 
-    <div class="bar-track" if="{{ running }}">
+    <div class="calib" if="{{ !calibrated }}">
+      <div class="calib-track">
+        <div class="calib-fill" style="width: {{ calibPct }}%;"></div>
+      </div>
+      <text class="calib-text">{{ calibrating ? '站着别动，正在校准 ' + calibPct + '%' : calibHint }}</text>
+      <text class="calib-sub" if="{{ !calibrating }}">平均运动量 {{ motionAvg }} · 阈值 0.5</text>
+    </div>
+
+    <div class="bar-track" if="{{ running && calibrated }}">
       <div class="bar-fill" style="width: {{ ringPct }}%;"></div>
     </div>
 
@@ -56,7 +64,15 @@ export default {
     mode: 'lift',
     modeLabel: '手持',
     todayCount: 0,
-    stateText: ''
+    stateText: '',
+    // 校准状态：把手环上的校准过程显式画出来。
+    // 之前的版本只写 "校准中" 三个字，用户看不到进度，也不知道自己在动会导致计时归零，
+    // 真机反馈是"校准完了还一直显示校准中"—— 其实是没校准上，但界面不告诉用户原因。
+    calibrating: true,
+    calibrated: false,
+    calibPct: 0,
+    calibHint: '站稳别动，检测到晃动会重新计时',
+    motionAvg: '0.00'
   },
 
   onInit() {
@@ -109,8 +125,13 @@ export default {
     this.seconds = 0
     this.timeText = '00:00'
     this.ringPct = 0
-    this.stateText = '校准'
-    this.tip = '站稳别动，正在校准…'
+    this.stateText = ''
+    this.calibrating = true
+    this.calibrated = false
+    this.calibPct = 0
+    this.motionAvg = '0.00'
+    this.calibHint = '站稳别动，检测到晃动会重新计时'
+    this.tip = '站着别动 1 秒完成校准'
 
     this.startSensor()
     this.startTimer()
@@ -123,6 +144,9 @@ export default {
     this.running = false
     this.stateText = ''
     this.ringPct = 0
+    this.calibrating = true
+    this.calibrated = false
+    this.calibPct = 0
 
     if (this.count > 0) {
       this.saveSession()
@@ -177,6 +201,32 @@ export default {
     if (!this.running) return
     var r = this.detector.push({ x: ret.x, y: ret.y, z: ret.z }, Date.now())
 
+    if (r.ready) {
+      // 校准通过
+      if (!this.calibrated) {
+        this.calibrating = false
+        this.calibrated = true
+        this.calibPct = 100
+        this.tip = '校准完成，开始深蹲'
+        this.vibrate('heavy')
+      }
+    } else {
+      // 校准中：把进度和运动量显式画出来。
+      // 用户抱怨的"一直显示校准中"多半是手在动 —— 让他看到运动量数值和阈值，
+      // 才知道要把手放稳，而不是盯着一个不动的进度条干等。
+      var pct = Math.round(r.calibProgress * 100)
+      if (pct !== this.calibPct) {
+        this.calibPct = pct
+      }
+      var avg = this.detector.motionAvg
+      this.motionAvg = avg.toFixed(2)
+      if (avg > 0.5) {
+        this.calibHint = '检测到晃动，请放稳手臂'
+      } else {
+        this.calibHint = '很好，保持不动'
+      }
+    }
+
     if (r.counted) {
       this.count = this.detector.count
       this.ringPct = Math.round((this.count % 20) / 20 * 100)
@@ -187,9 +237,6 @@ export default {
       }
     } else if (r.ready) {
       this.ringPct = Math.round(r.progress * 100)
-    }
-
-    if (r.ready) {
       this.stateText = r.state === 'bottom' ? '下蹲' : '站立'
     }
   },
@@ -291,6 +338,40 @@ export default {
   height: 4px;
   border-radius: 2px;
   background-color: #1f232b;
+}
+
+/* 校准区：把"为什么还没校准成功"直接告诉用户 */
+.calib {
+  width: 100%;
+  flex-direction: column;
+  align-items: center;
+}
+
+.calib-track {
+  width: 100%;
+  height: 5px;
+  border-radius: 3px;
+  background-color: #1f232b;
+  overflow: hidden;
+}
+
+.calib-fill {
+  height: 100%;
+  border-radius: 3px;
+  background-color: #ff6b35;
+}
+
+.calib-text {
+  font-size: 10px;
+  color: #ff9a78;
+  margin-top: 4px;
+  text-align: center;
+}
+
+.calib-sub {
+  font-size: 9px;
+  color: #6b7280;
+  margin-top: 2px;
 }
 
 .bar-fill {

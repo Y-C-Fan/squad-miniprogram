@@ -48,6 +48,15 @@
   <!-- 运行中：显示计划摘要 -->
   <view class="summary-line" wx:if="{{running}}">{{planText}}</view>
 
+  <!-- 校准进度：显式展示，否则用户只看到"校准中"却不知道为什么不动 -->
+  <view class="calib" wx:if="{{phase === 'calibrating'}}">
+    <view class="calib-track">
+      <view class="calib-fill" style="width: {{calibPct}}%"></view>
+    </view>
+    <text class="calib-text">站着别动 · 校准 {{calibPct}}%</text>
+    <text class="calib-sub">手臂有晃动会自动重新计时</text>
+  </view>
+
   <!-- 计数器 -->
   <view class="stage">
     <canvas type="2d" id="ring" class="ring"></canvas>
