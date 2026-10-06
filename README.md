@@ -39,21 +39,43 @@
 
 ---
 
+## 现在就能用
+
+**网页版（已上线，无需注册）**：<https://squat-counter-82622.app.workbuddy.host/>
+
+手机浏览器打开即可，跑的是**同一份算法源码**。iOS 会弹传感器授权，点「开始使用」允许即可。**建议先用它把阈值调顺手，再去做微信小程序。**
+
+**微信小程序**：需要注册 + 实名认证，见 [docs/LAUNCH.md](docs/LAUNCH.md)。代码已就绪，改一行 AppID 就能传。
+
+---
+
+## 三种形态，一份算法
+
+| 形态 | 状态 | 说明 |
+|---|---|---|
+| 📱 微信小程序 | 需注册后上传 | 完整功能，见 [docs/LAUNCH.md](docs/LAUNCH.md) |
+| 🌐 网页版 | ✅ **已上线可用** | [squat-counter-82622.app.workbuddy.host](https://squat-counter-82622.app.workbuddy.host/)，单文件 25.5KB |
+| ⌚ 手环 9 Pro | 需 AIoT IDE 编译侧载 | `band/`，见 [band/README.md](band/README.md) |
+
+`utils/squat-detector.js` 是唯一真相源，三端共用。改了它之后跑 `node tools/build-web.js` 重新生成网页版。构建脚本会拦住任何 `wx.` / `document.` / `require(` 混入算法文件的情况。
+
+---
+
 ## 三个必须知道的坑
 
 **① `requiredPrivateInfos: ["accelerometer"]` 不能少**
 
-从基础库 2.21.0 起，`wx.startAccelerometer` 属于微信认定的敏感接口。**不声明的话微信会静默屏蔽它 —— 不报错、不抛异常，只返回空值**，表现就是"点了开始数字永远不跳"，排查起来极其痛苦。`app.json` 里已配好。
+从基础库 2.21.0 起，`wx.startAccelerometer` 属于微信认定的敏感接口。**不声明的话微信会静默屏蔽它 —— 不报错、不抛异常、只返回空值**，表现就是"点了开始数字永远不跳"，排查起来极其痛苦。`app.json` 里已配好。
 
 同理 `__usePrivacyCheck__` 也要开。授权被拒后微信不允许二次弹窗申请，所以代码里走的是「自定义弹窗 → `wx.openSetting` 引导去设置页」，见 `pages/index/index.js` 的 `showSensorAuthGuide`。
 
 **② 传感器回调里绝对不能 setData**
 
-`interval: 'game'` 是 20ms/次 ≈ 50Hz。每次回调都 `setData` 会把 JS→Native 桥打满，表现为低端机掉帧。圆环进度只喂给 canvas、不参与 wxml 渲染，代码里**没有任何 `setData({ring})`**，并且 canvas 重绘也节流到 30fps（绘制同样在 UI 线程）。
+`interval: 'game'` 是 20ms/次 ≈ 50Hz。每次回调都 `setData` 会把 JS→Native 桥打满，表现为低端机掉帧。圆环进度只喂给 canvas、不参与 wxml 渲染，代码里**没有任何 `setData({ring})`**，并且 canvas 重绘也节流到 30fps（绘制同样在 UI 线程）。网页版同样按 30fps 节流。
 
 **③ 开发者工具里测不出算法准不准**
 
-工具里 accelerometer 是模拟数据。阈值必须用**真机预览**验证。详见 docs/LAUNCH.md 第七节。
+工具里 accelerometer 是模拟数据。阈值必须用**真机**验证 —— 用线上网页版最方便。详见 docs/LAUNCH.md 第七节。
 
 ---
 
@@ -125,11 +147,12 @@ top ── signal ≥ enter ──> bottom ── signal ≤ exit ──> top  (
 算法和业务逻辑都有离线自检脚本，用 Node 跑，不需要开发者工具：
 
 ```bash
-node tools/simulate.js     # 32 项：两种模式 × 三档灵敏度 × 干扰场景
-node tools/test-logic.js   # 36 项：卡路里 / 连续天数 / 热力图 / 勋章 / 存储
+node tools/simulate.js      # 32 项：两种模式 × 三档灵敏度 × 干扰场景
+node tools/test-logic.js    # 36 项：卡路里 / 连续天数 / 热力图 / 勋章 / 存储
+node tools/build-web.js     # 重新生成 web/index.html
 ```
 
-`simulate.js` 用合成加速度数据（含噪声）喂给探测器，覆盖 25°~60° 幅度、1.2s~3.0s 周期、以及「纯噪声」「小幅晃动」等不该计数的干扰场景。
+`simulate.js` 用合成加速度数据（含噪声）喂给探测器，覆盖 25°~60° 幅度、1.2s~3.0s 周期、以及「纯噪声」「小幅晃动」等不该计数的干扰场景。**改算法后先跑这两个脚本**，比手测靠谱得多。
 
 ---
 
@@ -149,7 +172,11 @@ node tools/test-logic.js   # 36 项：卡路里 / 连续天数 / 热力图 / 勋
 │   ├── fitness.js          卡路里 / 连续天数 / 热力图 / 勋章
 │   ├── format.js           时间日期格式化
 │   └── audio.js            报数反馈的可插拔层
-├── tools/            离线自检脚本（不打包进小程序）
+├── tools/            离线自检 + 网页版构建脚本（不打包进小程序）
+├── web/              网页版（构建产物，单文件，已上线）
+│   ├── index.template.html
+│   ├── index.html          ← 由 tools/build-web.js 生成，勿手改
+│   └── README.md
 └── band/             小米手环 9 Pro 版（Vela 快应用）
 ```
 

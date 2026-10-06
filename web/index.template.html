@@ -1,0 +1,386 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover,user-scalable=no">
+<meta name="theme-color" content="#0b0c0f">
+<title>蹲队 Squad · 深蹲自动计数</title>
+<style>
+*{margin:0;padding:0;box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+body{
+  background:#0b0c0f;color:#fff;
+  font-family:-apple-system,BlinkMacSystemFont,"PingFang SC","Helvetica Neue",sans-serif;
+  min-height:100vh;display:flex;flex-direction:column;
+  padding:env(safe-area-inset-top) 0 env(safe-area-inset-bottom);
+  overscroll-behavior:none;
+}
+.wrap{flex:1;display:flex;flex-direction:column;padding:16px 18px 20px;max-width:520px;margin:0 auto;width:100%}
+
+.seg{display:flex;background:#101216;border:1px solid #262a32;border-radius:999px;padding:5px;margin-bottom:14px}
+.seg button{
+  flex:1;background:none;border:none;color:rgba(255,255,255,.5);
+  font-size:14px;padding:9px 0;border-radius:999px;cursor:pointer;font-weight:500;
+  transition:all .18s;letter-spacing:.5px;
+}
+.seg button.on{background:#c6f24e;color:#10120a;font-weight:600}
+
+.stage{position:relative;width:min(78vw,300px);aspect-ratio:1;margin:10px auto 6px}
+canvas{position:absolute;inset:0;width:100%;height:100%}
+.ctr{position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:2px}
+.num{font-size:76px;font-weight:700;line-height:1;font-variant-numeric:tabular-nums;letter-spacing:-2px;transition:transform .1s}
+.num.pop{transform:scale(1.22)}
+.unit{font-size:14px;color:rgba(255,255,255,.42)}
+.tip{font-size:12px;color:rgba(255,255,255,.45);text-align:center;min-height:32px;line-height:1.5;margin-top:6px;padding:0 12px}
+
+.metrics{display:flex;margin:10px 0 14px;background:#16181d;border:1px solid #262a32;border-radius:16px}
+.metrics>div{flex:1;padding:12px 0;text-align:center;border-right:1px solid #21252c}
+.metrics>div:last-child{border:none}
+.mv{display:block;font-size:19px;font-weight:600;font-variant-numeric:tabular-nums}
+.ml{display:block;margin-top:3px;font-size:11px;color:rgba(255,255,255,.4)}
+
+button.big{
+  width:100%;padding:15px 0;border:none;border-radius:999px;
+  background:#c6f24e;color:#10120a;font-size:16px;font-weight:600;cursor:pointer;
+  transition:transform .08s;
+}
+button.big:active{transform:scale(.97)}
+button.big.stop{background:#2a1414;color:#ff7a5c}
+button.ghost{
+  width:100%;margin-top:8px;padding:11px 0;border:1px solid #3a3f49;border-radius:999px;
+  background:none;color:rgba(255,255,255,.7);font-size:13px;cursor:pointer;
+}
+
+.chips{display:flex;flex-wrap:wrap;gap:7px;margin-top:14px;justify-content:center}
+.chip{
+  background:#1f232b;color:rgba(255,255,255,.7);border:none;border-radius:999px;
+  padding:7px 13px;font-size:12px;cursor:pointer;
+}
+.chip:active{background:#2a2f38}
+
+.hist{margin-top:14px;background:#16181d;border:1px solid #262a32;border-radius:16px;padding:14px 16px}
+.hist h3{font-size:12px;font-weight:600;color:rgba(255,255,255,.45);letter-spacing:1px;margin-bottom:10px}
+.row{display:flex;justify-content:space-between;align-items:center;padding:8px 0;border-bottom:1px solid #21252c;font-size:13px}
+.row:last-child{border:none}
+.row .k{color:rgba(255,255,255,.55)}
+.row .v{font-variant-numeric:tabular-nums;font-weight:600}
+.total{color:#c6f24e;font-size:20px}
+
+.dbg{margin-top:10px;font-size:11px;color:#ff6b35;text-align:center;min-height:14px;font-variant-numeric:tabular-nums}
+.note{margin-top:16px;font-size:11px;color:rgba(255,255,255,.3);line-height:1.7;text-align:center}
+.gate{position:fixed;inset:0;background:#0b0c0f;display:flex;flex-direction:column;align-items:center;justify-content:center;padding:32px;z-index:99;text-align:center}
+.gate h1{font-size:26px;font-weight:700;margin-bottom:8px}
+.gate h1 em{font-style:normal;color:#c6f24e}
+.gate p{font-size:14px;color:rgba(255,255,255,.55);line-height:1.8;margin-bottom:8px}
+.gate ol{text-align:left;font-size:13px;color:rgba(255,255,255,.6);line-height:2;margin:16px 0 8px;padding-left:20px}
+.gate .small{font-size:12px;color:rgba(255,255,255,.35);margin-top:12px}
+</style>
+</head>
+<body>
+
+<div class="gate" id="gate">
+  <h1>蹲<em>队</em> Squad</h1>
+  <p>深蹲自动计数 · 扔口袋里就能用</p>
+  <ol>
+    <li>把手机放裤袋，或拿在手上</li>
+    <li>选对检测方式（下面可切）</li>
+    <li>站着别动 1 秒完成校准</li>
+    <li>开始深蹲，次数自动跳</li>
+  </ol>
+  <button class="big" id="gateBtn" style="max-width:260px;margin-top:12px">开始使用</button>
+  <p class="small" id="gateTip">需要传感器权限 · 数据仅存本机</p>
+</div>
+
+<div class="wrap">
+  <div class="seg">
+    <button class="on" data-m="free">自由</button>
+    <button data-m="target">目标</button>
+    <button data-m="hiit">HIIT</button>
+  </div>
+
+  <div class="stage">
+    <canvas id="cv"></canvas>
+    <div class="ctr">
+      <div class="num" id="num">0</div>
+      <div class="unit">次</div>
+    </div>
+  </div>
+  <div class="tip" id="tip">点击下方按钮开始，站着别动 1 秒</div>
+
+  <div class="metrics">
+    <div><span class="mv" id="t">00:00</span><span class="ml">时长</span></div>
+    <div><span class="mv" id="c">0</span><span class="ml">千卡</span></div>
+    <div><span class="mv" id="s">0</span><span class="ml">连续天数</span></div>
+  </div>
+
+  <button class="big" id="go">开始训练</button>
+  <button class="ghost" id="rst" style="display:none">结束并保存</button>
+
+  <div class="chips">
+    <button class="chip" id="chMode">检测：手持</button>
+    <button class="chip" id="chSens">灵敏度：中</button>
+    <button class="chip" id="chDbg">调试：关</button>
+  </div>
+
+  <div class="dbg" id="dbg"></div>
+
+  <div class="hist">
+    <h3>最近记录</h3>
+    <div id="hist"></div>
+  </div>
+
+  <p class="note">
+    数据只存在这台设备的浏览器里 · 无服务器 · 无账号<br>
+    同款微信小程序：github.com/Y-C-Fan/squad-miniprogram
+  </p>
+</div>
+
+<script>
+/* __DETECTOR__ */
+</script>
+<script>
+(function(){
+'use strict';
+
+var KEY='sq_web';
+var cfg={mode:'lift',sens:'medium',debug:false,weight:60};
+var sessions=[];
+try{sessions=JSON.parse(localStorage.getItem(KEY)||'[]')}catch(e){}
+
+var MODE_LABEL={tilt:'口袋',lift:'手持'};
+var SENS_LABEL={low:'低',medium:'中',high:'高'};
+var SENS_DESC={low:'需要蹲得很深',medium:'常规幅度',high:'轻微屈膝也算'};
+var MODE_DESC={tilt:'手机放裤袋/绑腿',lift:'手机拿在手上'};
+
+var $=function(id){return document.getElementById(id)};
+var det=null, running=false, startedAt=0, seconds=0, count=0, lastRing=-1, lastDraw=0, timer=null, target=50, sets=4, reps=15, rest=30, resting=false, restLeft=0, curSet=0;
+
+// ── 启动门禁（iOS 13+ 必须在用户手势里请求传感器权限）──
+var gate=$('gate'), gateBtn=$('gateBtn');
+var IOS=typeof DeviceMotionEvent!=='undefined' && typeof DeviceMotionEvent.requestPermission==='function';
+if(!IOS && !gateBtn){}
+gateBtn.addEventListener('click', function(){
+  function go(){ gate.style.display='none'; renderHist(); }
+  if(IOS){
+    DeviceMotionEvent.requestPermission().then(function(r){
+      if(r==='granted'){ go(); attach(); }
+      else { $('gateTip').textContent='⚠️ 权限被拒绝，请在浏览器设置里允许传感器'; }
+    }).catch(function(e){ $('gateTip').textContent='⚠️ 无法获取权限：'+e.message });
+  } else {
+    go(); attach();
+  }
+});
+$('gateTip').textContent = IOS ? 'iOS 需点击授权传感器' : '点开始以启用传感器';
+
+// ── 传感器 ──
+var listening=false;
+function attach(){
+  if(listening) return;
+  listening=true;
+  window.addEventListener('devicemotion', function(e){
+    if(!running) return;
+    var a=e.accelerationIncludingGravity;
+    if(!a||a.x===null) return;
+    onAcc(a);
+  });
+}
+function onAcc(a){
+  var r=det.push({x:a.x,y:a.y,z:a.z}, Date.now());
+  if(r.counted) onRep();
+  if(r.ready){
+    var p=ringProg(r.progress);
+    if(Math.abs(p-lastRing)>0.02){ lastRing=p; draw(p); }
+  }
+  if(cfg.debug){
+    dbgEl.textContent='倾角 '+Math.round(r.tilt)+'° · 位移 '+r.displacement.toFixed(2)+'m · 运动量 '+r.motion.toFixed(1)+' · '+r.state;
+  }
+}
+function ringProg(live){
+  if(mode==='target') return Math.min(count/Math.max(1,target),1);
+  if(mode==='hiit') return (count%Math.max(1,reps))/Math.max(1,reps);
+  return live;
+}
+
+function onRep(){
+  count=det.count;
+  numEl.textContent=count;
+  numEl.classList.add('pop');
+  setTimeout(function(){numEl.classList.remove('pop')},110);
+  if(navigator.vibrate) navigator.vibrate(18);
+
+  var every=10;
+  if(count>0&&count%every===0){
+    if(navigator.vibrate) navigator.vibrate([18,60,18]);
+    tipEl.textContent=count+' 次！';
+  }
+  if(mode==='target'&&count>=target){ finish(true); return; }
+  if(mode==='hiit'&&count%reps===0){
+    curSet=count/reps;
+    if(count>=sets*reps) finish(true);
+    else { resting=true; restLeft=Math.max(1,rest); tipEl.textContent='组间休息'; }
+  }
+}
+
+// ── 计时 ──
+function tick(){
+  if(resting){
+    restLeft--;
+    if(restLeft<=0){ resting=false; tipEl.textContent='继续！'; if(navigator.vibrate)navigator.vibrate(30); }
+    else { tipEl.textContent='休息 '+restLeft+' 秒'; if(restLeft<=3&&navigator.vibrate)navigator.vibrate(20); }
+    return;
+  }
+  seconds++;
+  var m=Math.floor(seconds/60), s=seconds%60;
+  tEl.textContent=(m<10?'0'+m:m)+':'+(s<10?'0'+s:s);
+  cEl.textContent=(5.0*cfg.weight*(seconds/3600)).toFixed(1);
+}
+
+var numEl=$('num'), tipEl=$('tip'), tEl=$('t'), cEl=$('c'), sEl=$('s'), dbgEl=$('dbg');
+var mode='free';
+
+$('go').addEventListener('click', function(){
+  if(running) return;
+  det=new SquatDetector({mode:cfg.mode,sensitivity:cfg.sens});
+  running=true; count=0; seconds=0; lastRing=-1; resting=false; curSet=0;
+  startedAt=Date.now();
+  numEl.textContent='0'; tEl.textContent='00:00'; cEl.textContent='0.0';
+  tipEl.textContent='校准中，站着别动…';
+  this.textContent='训练中';
+  this.classList.add('stop');
+  $('rst').style.display='block';
+  $('rst').textContent='结束并保存';
+  if(navigator.vibrate) navigator.vibrate(35);
+  clearInterval(timer); timer=setInterval(tick,1000);
+  attach();
+});
+$('rst').addEventListener('click', function(){ finish(false) });
+
+function finish(auto){
+  if(!running) return;
+  running=false; clearInterval(timer);
+  $('go').textContent='开始训练'; $('go').classList.remove('stop');
+  $('rst').style.display='none';
+  draw(0); lastRing=-1;
+  if(count>0){
+    var cal=Math.max(5.0*cfg.weight*(seconds/3600), count*0.28);
+    sessions.unshift({at:startedAt,c:count,s:seconds,k:+cal.toFixed(1)});
+    try{localStorage.setItem(KEY,JSON.stringify(sessions.slice(0,100)))}catch(e){}
+    if(navigator.vibrate) navigator.vibrate([30,80,30]);
+    tipEl.textContent='完成 '+count+' 次 · '+fmtDur(seconds*1000)+' · '+cal.toFixed(1)+' 千卡';
+    renderHist();
+  } else {
+    tipEl.textContent='这次没数到，试试换个摆放方式';
+  }
+  numEl.textContent='0'; tEl.textContent='00:00'; cEl.textContent='0.0';
+  streak();
+}
+
+function fmtDur(ms){
+  var s=Math.floor(ms/1000);
+  if(s<60) return s+'秒';
+  var m=Math.floor(s/60);
+  if(m<60) return m+'分'+(s%60)+'秒';
+  return Math.floor(m/60)+'小时'+(m%60)+'分';
+}
+function dayKey(ts){var d=new Date(ts);var p=function(n){return n<10?'0'+n:''+n};return d.getFullYear()+'-'+p(d.getMonth()+1)+'-'+p(d.getDate())}
+function streak(){
+  var set={},DAY=864e5;
+  sessions.forEach(function(s){set[dayKey(s.at)]=true});
+  var n=0,cur=Date.now();
+  if(!set[dayKey(cur)]) cur-=DAY;
+  while(set[dayKey(cur)]){n++;cur-=DAY}
+  sEl.textContent=n;
+}
+function renderHist(){
+  streak();
+  var h=document.getElementById('hist');
+  if(!sessions.length){ h.innerHTML='<div class="row"><span class="k">还没有记录，去练一组</span></div>'; return; }
+  var total=0,cal=0;
+  sessions.forEach(function(s){total+=s.c;cal+=s.k});
+  var html='<div class="row"><span class="k">累计次数</span><span class="v total">'+total+'</span></div>';
+  html+='<div class="row"><span class="k">训练天数</span><span class="v">'+sessions.length+'</span></div>';
+  html+='<div class="row"><span class="k">累计消耗</span><span class="v">'+cal.toFixed(0)+' 千卡</span></div>';
+  sessions.slice(0,5).forEach(function(s){
+    var d=new Date(s.at),p=function(n){return n<10?'0'+n:''+n};
+    html+='<div class="row"><span class="k">'+p(d.getMonth()+1)+'-'+p(d.getDate())+' '+p(d.getHours())+':'+p(d.getMinutes())+'</span><span class="v">'+s.c+' 次</span></div>';
+  });
+  h.innerHTML=html;
+}
+
+// ── 切换 ──
+document.querySelectorAll('.seg button').forEach(function(b){
+  b.addEventListener('click', function(){
+    document.querySelectorAll('.seg button').forEach(function(x){x.classList.remove('on')});
+    b.classList.add('on');
+    mode=b.dataset.m;
+    var box=document.getElementById('planBox');
+    tipEl.textContent = mode==='free'?'自由训练，不设上限'
+      : mode==='target'?'目标 '+target+' 次'
+      : sets+' 组 × '+reps+' 次，间歇 '+rest+' 秒';
+  });
+});
+$('chMode').addEventListener('click', function(){
+  cfg.mode = cfg.mode==='lift'?'tilt':'lift';
+  this.textContent='检测：'+MODE_LABEL[cfg.mode];
+  if(det) det.setMode(cfg.mode);
+});
+$('chSens').addEventListener('click', function(){
+  var order=['low','medium','high'];
+  var i=order.indexOf(cfg.sens);
+  cfg.sens=order[(i+1)%3];
+  this.textContent='灵敏度：'+SENS_LABEL[cfg.sens];
+  if(det) det.setSensitivity(cfg.sens);
+  tipEl.textContent=SENS_DESC[cfg.sens];
+});
+$('chDbg').addEventListener('click', function(){
+  cfg.debug=!cfg.debug;
+  this.textContent='调试：'+(cfg.debug?'开':'关');
+  if(!cfg.debug) dbgEl.textContent='';
+});
+
+// ── 画环 ──
+var cv=$('cv'),cx2=cv.getContext('2d'),dpr=Math.min(devicePixelRatio||1,3),size=0;
+function sizeCanvas(){
+  var r=cv.getBoundingClientRect();
+  size=r.width;
+  cv.width=size*dpr; cv.height=size*dpr;
+  cx2.setTransform(dpr,0,0,dpr,0,0);
+  draw(lastRing<0?0:lastRing);
+}
+function draw(p){
+  if(!size) return;
+  var now=Date.now();
+  if(now-lastDraw<28) return;   // 30fps 节流
+  lastDraw=now;
+  var lw=11, r=size/2-lw, m=size/2;
+  cx2.clearRect(0,0,size,size);
+  cx2.lineWidth=lw; cx2.lineCap='round';
+  cx2.strokeStyle='rgba(255,255,255,.07)';
+  cx2.beginPath(); cx2.arc(m,m,r,0,6.2832); cx2.stroke();
+  p=Math.max(0,Math.min(1,p||0));
+  if(p>.002){
+    var g=cx2.createLinearGradient(0,0,size,size);
+    g.addColorStop(0,'#d9ff5c'); g.addColorStop(1,'#86d920');
+    cx2.strokeStyle=resting?'#ff6b35':g;
+    cx2.beginPath(); cx2.arc(m,m,r,-Math.PI/2,-Math.PI/2+6.2832*p); cx2.stroke();
+  }
+}
+addEventListener('resize', sizeCanvas);
+addEventListener('orientationchange', function(){setTimeout(sizeCanvas,200)});
+sizeCanvas();
+
+// 切到后台自动暂停（和微信小程序同款限制：传感器在后台会被系统降频）
+document.addEventListener('visibilitychange', function(){
+  if(document.hidden && running){
+    running=false; clearInterval(timer);
+    $('go').textContent='开始训练'; $('go').classList.remove('stop');
+    $('rst').style.display='none';
+    if(count>0) finish(false); else tipEl.textContent='已暂停（切后台会中断计数）';
+  }
+});
+
+// 阻止双击缩放 / 页面滚动干扰
+document.addEventListener('touchmove', function(e){ if(e.touches.length>1) e.preventDefault() }, {passive:false});
+})();
+</script>
+</body>
+</html>
