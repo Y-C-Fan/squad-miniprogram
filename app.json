@@ -19,18 +19,28 @@
     "list": [
       {
         "pagePath": "pages/index/index",
-        "text": "训练"
+        "text": "训练",
+        "iconPath": "assets/train_gray.png",
+        "selectedIconPath": "assets/train_green.png"
       },
       {
         "pagePath": "pages/stats/stats",
-        "text": "数据"
+        "text": "数据",
+        "iconPath": "assets/stats_gray.png",
+        "selectedIconPath": "assets/stats_green.png"
       },
       {
         "pagePath": "pages/settings/settings",
-        "text": "我的"
+        "text": "我的",
+        "iconPath": "assets/me_gray.png",
+        "selectedIconPath": "assets/me_green.png"
       }
     ]
   },
   "style": "v2",
-  "sitemapLocation": "sitemap.json"
+  "sitemapLocation": "sitemap.json",
+  "requiredPrivateInfos": [
+    "accelerometer"
+  ],
+  "__usePrivacyCheck__": true
 }

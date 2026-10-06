@@ -18,7 +18,8 @@ var DEFAULT_SETTINGS = {
   vibrationStrong: true, // 组/目标完成时强震动
   voice: false,          // 语音报数（需自行接入 TTS，见 utils/audio.js）
   voiceEvery: 10,        // 每多少次报一次数
-  debug: false           // 显示实时倾角等调试信息
+  debug: false,          // 显示实时倾角等调试信息
+  onboarded: false       // 是否已看过首次使用引导
 }
 
 function getSessions() {

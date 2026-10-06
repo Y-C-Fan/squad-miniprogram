@@ -18,8 +18,11 @@
 | 数据统计 | 累计次数、近 7 天柱状图、12 周热力图、四项核心指标 |
 | 连续打卡 | 连续天数 + 最长连续，今天还没练不算断签 |
 | 勋章 | 9 枚成就，含进度条 |
+| 隐私 | — |
 | 本地存储 | 数据只存在本机，无网络请求、无广告、无内购 |
 | CSV 导出 | 一键把训练记录复制成 CSV，粘进 Excel 就能看 |
+| 分享 | 好友分享 + 朋友圈，标题自动带真实数据（唯一的自然增长入口） |
+| 首次引导 | 三步弹窗引导摆放位置，避免用户选错检测方式 |
 
 ---
 
@@ -31,6 +34,26 @@
 4. 编译，真机预览需在工具里手动开启
 
 > ⚠️ 用测试号可以完整跑通所有功能，但**不能上传发布**。要发布需自行到 [mp.weixin.qq.com](https://mp.weixin.qq.com) 注册个人主体小程序，把 AppID 换掉。
+>
+> 完整上线步骤见 **[docs/LAUNCH.md](docs/LAUNCH.md)**，含隐私指引填写、审核自查、获客动作。
+
+---
+
+## 三个必须知道的坑
+
+**① `requiredPrivateInfos: ["accelerometer"]` 不能少**
+
+从基础库 2.21.0 起，`wx.startAccelerometer` 属于微信认定的敏感接口。**不声明的话微信会静默屏蔽它 —— 不报错、不抛异常，只返回空值**，表现就是"点了开始数字永远不跳"，排查起来极其痛苦。`app.json` 里已配好。
+
+同理 `__usePrivacyCheck__` 也要开。授权被拒后微信不允许二次弹窗申请，所以代码里走的是「自定义弹窗 → `wx.openSetting` 引导去设置页」，见 `pages/index/index.js` 的 `showSensorAuthGuide`。
+
+**② 传感器回调里绝对不能 setData**
+
+`interval: 'game'` 是 20ms/次 ≈ 50Hz。每次回调都 `setData` 会把 JS→Native 桥打满，表现为低端机掉帧。圆环进度只喂给 canvas、不参与 wxml 渲染，代码里**没有任何 `setData({ring})`**，并且 canvas 重绘也节流到 30fps（绘制同样在 UI 线程）。
+
+**③ 开发者工具里测不出算法准不准**
+
+工具里 accelerometer 是模拟数据。阈值必须用**真机预览**验证。详见 docs/LAUNCH.md 第七节。
 
 ---
 
@@ -114,8 +137,10 @@ node tools/test-logic.js   # 36 项：卡路里 / 连续天数 / 热力图 / 勋
 
 ```
 ├── app.js / app.json / app.wxss
+├── assets/                    tabBar 图标 + 分享图
+├── docs/LAUNCH.md             ★ 上线手册：隐私指引 / 审核 / 获客
 ├── pages/
-│   ├── index/        训练页：圆环计数器 + 三种模式
+│   ├── index/        训练页：圆环计数器 + 三种模式 + 分享
 │   ├── stats/        数据页：汇总 + 图表 + 勋章 + 记录
 │   └── settings/     设置页：身体参数 / 检测 / 反馈 / 数据
 ├── utils/

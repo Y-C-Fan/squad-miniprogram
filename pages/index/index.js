@@ -60,7 +60,7 @@ Page({
     seconds: 0,
     timeText: '00:00',
     calories: 0,
-    ring: 0,
+
     tip: '把手机放口袋里或拿在手上，点开始',
     planText: '',
     restLeft: 0,
@@ -110,7 +110,36 @@ Page({
     if (this.data.running && this.data.count > 0) this.saveSession(true)
     this.stopTimer()
     this.stopSensor()
+    if (this._drawTimer) clearTimeout(this._drawTimer)
     try { wx.setKeepScreenOn({ keepScreenOn: false }) } catch (e) {}
+  },
+
+  /* ────────────────── 分享（工具类小程序唯一的自然增长入口） ────────────────── */
+
+  onShareAppMessage: function () {
+    var s = fit.summary(store.getSessions())
+    var title
+    if (s.totalCount > 0) {
+      title = '我蹲了 ' + s.totalCount + ' 个深蹲，来比比谁多'
+    } else {
+      title = '深蹲还在手动数？这个小程序帮你自动数'
+    }
+    return {
+      title: title,
+      path: '/pages/index/index?from=share',
+      imageUrl: '/assets/share.png'
+    }
+  },
+
+  onShareTimeline: function () {
+    var s = fit.summary(store.getSessions())
+    return {
+      title: s.streak > 0
+        ? '连续深蹲 ' + s.streak + ' 天，累计 ' + s.totalCount + ' 个'
+        : '深蹲自动计数，扔口袋里就能用',
+      query: 'from=timeline',
+      imageUrl: '/assets/share.png'
+    }
   },
 
   /* ────────────────── 配置 ────────────────── */
@@ -188,6 +217,33 @@ Page({
   /* ────────────────── 训练控制 ────────────────── */
 
   onStart: function () {
+    // 首次使用先教一遍怎么放 —— 深蹲计数最大的失败原因是用户把手机拿在手里却选了"口袋"模式，
+    // 或者点了开始就急着蹲，来不及完成校准。
+    if (!store.getSettings().onboarded) {
+      this.showOnboarding()
+      return
+    }
+    this.beginTraining()
+  },
+
+  showOnboarding: function () {
+    var self = this
+    wx.showModal({
+      title: '三步开始',
+      content: '1. 手机放裤袋或绑腿上 → 选「口袋」\n2. 站着别动 1 秒完成校准\n3. 开始深蹲，次数自动跳',
+      confirmText: '知道了',
+      cancelText: '看设置',
+      success: function (res) {
+        var s = store.getSettings()
+        s.onboarded = true
+        store.saveSettings(s)
+        if (res.cancel) { self.goSettings(); return }
+        self.beginTraining()
+      }
+    })
+  },
+
+  beginTraining: function () {
     var d = this.data
     // 参数落地
     this.setData({
@@ -209,10 +265,10 @@ Page({
       running: true, paused: false, resting: false,
       phase: 'calibrating',
       count: 0, seconds: 0, timeText: '00:00', calories: 0,
-      ring: 0, restLeft: 0, curSet: 0,
+      restLeft: 0, curSet: 0,
       tip: '校准中，请站立不动…'
     })
-    this.drawRing(0)
+    this.ringValue = 0; this.scheduleDraw()
 
     audio.setEnabled(!!this.settings.voice)
     try { wx.setKeepScreenOn({ keepScreenOn: true }) } catch (e) {}
@@ -244,11 +300,11 @@ Page({
 
     this.setData({
       running: false, paused: false, resting: false, phase: 'idle',
-      count: 0, seconds: 0, timeText: '00:00', calories: 0, ring: 0,
+      count: 0, seconds: 0, timeText: '00:00', calories: 0,
       restLeft: 0, curSet: 0,
       tip: '把手机放口袋里或拿在手上，点开始'
     })
-    this.drawRing(0)
+    this.ringValue = 0; this.scheduleDraw()
     this.refreshStreak()
 
     if (!saved) return
@@ -297,9 +353,57 @@ Page({
   startSensor: function () {
     var self = this
     this.stopSensor()
+
+    // 加速度计是微信认定的敏感接口。
+    // 关键：用户一旦拒绝授权，微信不允许二次弹窗申请（"首次询问 + 拒绝后不可再申请"），
+    // 所以必须走自定义引导 → 跳设置页，不能直接裸调 API。
+    wx.getPrivacySetting({
+      success: function (res) {
+        if (res.needAuthorization) {
+          wx.requirePrivacyAuthorize({
+            success: function () { self.subscribeAcc() },
+            fail: function () { self.showSensorAuthGuide() }
+          })
+        } else {
+          self.subscribeAcc()
+        }
+      },
+      fail: function () { self.subscribeAcc() }
+    })
+  },
+
+  /** 授权被拒 / 被拒过：引导去设置页手动开启，别让用户对着没反应的界面发呆 */
+  showSensorAuthGuide: function () {
+    var self = this
+    wx.showModal({
+      title: '需要传感器权限',
+      content: '深蹲计数靠手机加速度计识别动作，需要授权才能使用。可在「设置 → 我的 → 授权管理」中开启。',
+      confirmText: '去设置',
+      cancelText: '知道了',
+      success: function (res) {
+        if (res.confirm) {
+          wx.openSetting({
+            success: function (setting) {
+              if (setting.authSetting && setting.authSetting['scope.userSensors']) {
+                self.subscribeAcc()
+              }
+            }
+          })
+        } else {
+          self.pause()
+        }
+      }
+    })
+  },
+
+  subscribeAcc: function () {
+    var self = this
     try {
       wx.startAccelerometer({ interval: 'game' })
-    } catch (e) {}
+    } catch (e) {
+      this.pause()
+      return
+    }
     this._accHandler = function (res) { self.onAcc(res) }
     wx.onAccelerometerChange(this._accHandler)
   },
@@ -325,11 +429,14 @@ Page({
     if (r.counted) this.onRep()
 
     if (r.ready) {
+      // 性能要点：ring 只喂给 canvas，不参与 wxml 渲染，所以绝对不能 setData。
+      // 加速度计 interval:'game' 是 20ms/次 ≈ 50Hz，每次都 setData 会直接把
+      // JS→Native 桥打满，表现为界面掉帧。这里既不 setData，也把 canvas 重绘节流到 30fps。
       var p = this.ringProgress(r.progress)
       if (Math.abs(p - this.lastRing) > 0.02) {
         this.lastRing = p
-        this.setData({ ring: p })
-        this.drawRing(p)
+        this.ringValue = p
+        this.scheduleDraw()
       }
     }
 
@@ -449,8 +556,25 @@ Page({
         ctx.scale(dpr, dpr)
         self.canvasSize = res[0].width
         self.ctx = ctx
-        self.drawRing(self.data.ring)
+        self.ringValue = self.ringValue || 0
+        self.drawRing(self.ringValue)
       })
+  },
+
+  /**
+   * canvas 重绘节流。
+   * 50Hz 的传感器回调不能直接画 canvas —— canvas 绘制同样在 UI 线程，
+   * 每 20ms 画一次会让低端机掉帧。这里攒到 33ms（30fps）再画一次，
+   * 人眼完全看不出差别，但绘制压力降了 40%。
+   */
+  scheduleDraw: function () {
+    if (this._drawPending) return
+    this._drawPending = true
+    var self = this
+    this._drawTimer = setTimeout(function () {
+      self._drawPending = false
+      self.drawRing(self.ringValue || 0)
+    }, 33)
   },
 
   drawRing: function (p) {
