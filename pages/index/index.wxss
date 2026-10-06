@@ -1,0 +1,179 @@
+/* 训练页 */
+
+.stage {
+  position: relative;
+  width: 560rpx;
+  height: 560rpx;
+  margin: 40rpx auto 8rpx;
+}
+
+.ring {
+  position: absolute;
+  left: 0;
+  top: 0;
+  width: 560rpx;
+  height: 560rpx;
+}
+
+.stage-inner {
+  position: absolute;
+  left: 0;
+  top: 0;
+  width: 100%;
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+}
+
+.num-wrap {
+  display: flex;
+  align-items: baseline;
+  transform-origin: center center;
+}
+
+.num {
+  font-size: 168rpx;
+  font-weight: 700;
+  line-height: 1;
+  color: #ffffff;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: -4rpx;
+}
+
+.unit {
+  font-size: 34rpx;
+  color: rgba(255, 255, 255, .45);
+  margin-left: 8rpx;
+}
+
+.tip {
+  margin-top: 18rpx;
+  font-size: 24rpx;
+  color: rgba(255, 255, 255, .42);
+  max-width: 380rpx;
+  text-align: center;
+  line-height: 1.6;
+}
+
+.rest-label {
+  font-size: 26rpx;
+  color: #ff6b35;
+  letter-spacing: 2rpx;
+}
+
+.rest-num {
+  font-size: 150rpx;
+  font-weight: 700;
+  line-height: 1.1;
+  color: #ff6b35;
+  font-variant-numeric: tabular-nums;
+}
+
+.rest-unit {
+  font-size: 24rpx;
+  color: rgba(255, 255, 255, .5);
+}
+
+/* 模式参数卡 */
+.plan {
+  margin-top: 28rpx;
+}
+
+.plan-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 14rpx 0;
+  border-bottom: 1rpx solid #21252c;
+}
+
+.plan-row:last-child {
+  border-bottom: none;
+}
+
+.plan-k {
+  font-size: 27rpx;
+  color: rgba(255, 255, 255, .72);
+}
+
+.plan-v {
+  font-size: 27rpx;
+  color: rgba(255, 255, 255, .42);
+}
+
+.plan-input {
+  width: 200rpx;
+  text-align: right;
+  font-size: 30rpx;
+  color: #c6f24e;
+  font-variant-numeric: tabular-nums;
+}
+
+.summary-line {
+  margin: 28rpx 0 0;
+  text-align: center;
+  font-size: 24rpx;
+  color: rgba(255, 255, 255, .4);
+}
+
+/* 指标 */
+.metrics {
+  display: flex;
+  margin: 8rpx 0 24rpx;
+}
+
+.metric {
+  flex: 1;
+  text-align: center;
+  padding: 24rpx 0;
+  border-right: 1rpx solid #21252c;
+}
+
+.metric:last-child {
+  border-right: none;
+}
+
+.mv {
+  display: block;
+  font-size: 40rpx;
+  font-weight: 600;
+  color: #ffffff;
+  font-variant-numeric: tabular-nums;
+}
+
+.ml {
+  display: block;
+  margin-top: 6rpx;
+  font-size: 22rpx;
+  color: rgba(255, 255, 255, .4);
+}
+
+.debug {
+  margin-bottom: 20rpx;
+  text-align: center;
+  font-size: 22rpx;
+  color: #ff6b35;
+  font-variant-numeric: tabular-nums;
+}
+
+.controls {
+  margin-top: 8rpx;
+}
+
+.chips {
+  display: flex;
+  justify-content: center;
+  flex-wrap: wrap;
+  gap: 16rpx;
+  margin-top: 28rpx;
+}
+
+.chip {
+  cursor: pointer;
+}
+
+.tips {
+  margin-top: 40rpx;
+}

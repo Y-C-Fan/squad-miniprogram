@@ -1,0 +1,121 @@
+<view class="page">
+
+  <!-- 顶部模式切换 -->
+  <view class="seg">
+    <view wx:for="{{modes}}"
+          wx:key="key"
+          class="seg-item {{mode === item.key ? 'on' : ''}}"
+          data-key="{{item.key}}"
+          bindtap="onModeChange">{{item.label}}</view>
+  </view>
+
+  <!-- 模式参数（未开始时可调） -->
+  <view class="card plan" wx:if="{{!running}}">
+    <block wx:if="{{mode === 'free'}}">
+      <view class="plan-row">
+        <text class="plan-k">自由训练</text>
+        <text class="plan-v">不设上限，随时结束</text>
+      </view>
+    </block>
+
+    <block wx:if="{{mode === 'target'}}">
+      <view class="plan-row">
+        <text class="plan-k">目标次数</text>
+        <input class="plan-input" type="number" value="{{target}}"
+               data-key="target" bindinput="onInput" bindblur="blurTarget" />
+      </view>
+    </block>
+
+    <block wx:if="{{mode === 'hiit'}}">
+      <view class="plan-row">
+        <text class="plan-k">组数</text>
+        <input class="plan-input" type="number" value="{{sets}}"
+               data-key="sets" bindinput="onInput" bindblur="blurSets" />
+      </view>
+      <view class="plan-row">
+        <text class="plan-k">每组次数</text>
+        <input class="plan-input" type="number" value="{{repsPerSet}}"
+               data-key="repsPerSet" bindinput="onInput" bindblur="blurReps" />
+      </view>
+      <view class="plan-row">
+        <text class="plan-k">组间歇（秒）</text>
+        <input class="plan-input" type="number" value="{{restSec}}"
+               data-key="restSec" bindinput="onInput" bindblur="blurRest" />
+      </view>
+    </block>
+  </view>
+
+  <!-- 运行中：显示计划摘要 -->
+  <view class="summary-line" wx:if="{{running}}">{{planText}}</view>
+
+  <!-- 计数器 -->
+  <view class="stage">
+    <canvas type="2d" id="ring" class="ring"></canvas>
+
+    <view class="stage-inner">
+      <block wx:if="{{resting}}">
+        <text class="rest-label">组间休息</text>
+        <text class="rest-num">{{restLeft}}</text>
+        <text class="rest-unit">秒后开始第 {{curSet + 1}} 组</text>
+      </block>
+      <block wx:else>
+        <view class="num-wrap" animation="{{anim}}">
+          <text class="num">{{count}}</text>
+          <text class="unit">次</text>
+        </view>
+        <text class="tip">{{tip}}</text>
+      </block>
+    </view>
+  </view>
+
+  <!-- 实时指标 -->
+  <view class="metrics">
+    <view class="metric">
+      <text class="mv">{{timeText}}</text>
+      <text class="ml">时长</text>
+    </view>
+    <view class="metric">
+      <text class="mv">{{calories}}</text>
+      <text class="ml">千卡</text>
+    </view>
+    <view class="metric">
+      <text class="mv">{{streak}}</text>
+      <text class="ml">连续天数</text>
+    </view>
+  </view>
+
+  <view class="debug" wx:if="{{debugText}}">{{debugText}}</view>
+
+  <!-- 控制区 -->
+  <view class="controls">
+    <block wx:if="{{!running}}">
+      <view class="btn" bindtap="onStart">开始训练</view>
+    </block>
+    <block wx:elif="{{paused}}">
+      <view class="btn-row">
+        <view class="btn ghost" bindtap="resume">继续</view>
+        <view class="btn plain" bindtap="onFinishTap">结束并保存</view>
+      </view>
+    </block>
+    <block wx:else>
+      <view class="btn-row">
+        <view class="btn ghost" bindtap="pause">暂停</view>
+        <view class="btn plain" bindtap="onFinishTap">结束并保存</view>
+      </view>
+    </block>
+  </view>
+
+  <!-- 快捷设置 -->
+  <view class="chips" wx:if="{{!running}}">
+    <view class="chip" bindtap="pickDetectMode">检测方式：{{detectLabel}}</view>
+    <view class="chip" bindtap="pickSensitivity">灵敏度：{{sensitivityLabel}}</view>
+    <view class="chip" bindtap="goSettings">更多设置</view>
+  </view>
+
+  <view class="hint tips">
+    ① 站立点「开始」，静止约 1 秒完成体感校准，再开始下蹲。
+    ② 放口袋或绑腿时选「口袋」，拿在手上时选「手持」——两者用不同信号判断。
+    ③ 小程序退到后台或锁屏会暂停计数，训练时请保持屏幕常亮。
+  </view>
+
+</view>

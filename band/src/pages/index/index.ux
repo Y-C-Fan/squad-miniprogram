@@ -1,0 +1,316 @@
+<template>
+  <div class="page">
+    <div class="header">
+      <text class="title">蹲队</text>
+      <text class="mode" onclick="toggleMode">{{ modeLabel }}</text>
+    </div>
+
+    <div class="count-wrap">
+      <text class="count">{{ count }}</text>
+      <text class="unit">次</text>
+    </div>
+
+    <text class="hint">{{ tip }}</text>
+
+    <div class="bar-track" if="{{ running }}">
+      <div class="bar-fill" style="width: {{ ring * 100 }}%;"></div>
+    </div>
+
+    <div class="stats" if="{{ running }}">
+      <text class="stat">{{ timeText }}</text>
+      <text class="stat">{{ seconds }}s</text>
+    </div>
+
+    <div class="btn main" onclick="toggle">
+      <text>{{ running ? '结束' : '开始' }}</text>
+    </div>
+
+    <div class="btn ghost" onclick="reset" if="{{ running || count > 0 }}">
+      <text>重置</text>
+    </div>
+  </div>
+</template>
+
+<script>
+import sensor from '@system.sensor'
+import vibrator from '@system.vibrator'
+import storage from '@system.storage'
+import SquatDetector from '../../common/squat-detector.js'
+
+var MODE_LABEL = { tilt: '口袋', lift: '手持' }
+
+export default {
+  private: {
+    running: false,
+    count: 0,
+    seconds: 0,
+    timeText: '00:00',
+    tip: '点击开始，先站稳 1 秒',
+    ring: 0,
+    mode: 'lift',
+    modeLabel: '手持',
+    todayCount: 0,
+    lastTs: 0
+  },
+
+  onInit() {
+    this.detector = new SquatDetector({ mode: this.mode, sensitivity: 'medium' })
+    this.timer = null
+  },
+
+  onShow() {
+    var self = this
+    // 读今天的累计次数
+    try {
+      var raw = storage.getSync({ key: 'sq_today', success: function (v) { return v } })
+      if (raw && typeof raw.count === 'number') {
+        self.todayCount = raw.count
+      }
+    } catch (e) {
+      console.log('读取历史失败', e)
+    }
+  },
+
+  onHide() {
+    this.stopSensor()
+    this.stopTimer()
+    // 离开应用时如果还在训练，自动落一次记录
+    if (this.running) this.saveSession()
+  },
+
+  toggle() {
+    if (this.running) this.stop()
+    else this.start()
+  },
+
+  start() {
+    this.detector = new SquatDetector({ mode: this.mode, sensitivity: 'medium' })
+    this.running = true
+    this.count = 0
+    this.seconds = 0
+    this.timeText = '00:00'
+    this.ring = 0
+    this.tip = '站稳别动，正在校准…'
+
+    this.startSensor()
+    this.startTimer()
+  },
+
+  stop() {
+    this.stopSensor()
+    this.stopTimer()
+    this.saveSession()
+    this.running = false
+    this.tip = '已保存，休息一下'
+    vibrator.vibrate({ type: 'heavy' })
+  },
+
+  reset() {
+    this.stopSensor()
+    this.stopTimer()
+    this.running = false
+    this.count = 0
+    this.seconds = 0
+    this.timeText = '00:00'
+    this.ring = 0
+    this.tip = '点击开始，先站稳 1 秒'
+  },
+
+  toggleMode() {
+    // 手环在手腕上，倾角信号会被手臂摆动污染，所以默认走垂直位移检测
+    this.mode = this.mode === 'lift' ? 'tilt' : 'lift'
+    this.modeLabel = MODE_LABEL[this.mode]
+    this.detector.setMode(this.mode)
+    if (!this.running) {
+      this.detector = new SquatDetector({ mode: this.mode, sensitivity: 'medium' })
+    }
+    this.tip = '已切到' + this.modeLabel + '模式'
+  },
+
+  startSensor() {
+    var self = this
+    try {
+      sensor.subscribeAccelerometer({
+        interval: 'game',   // 约 20ms/次，和小程序端采样率一致
+        callback: function (ret) {
+          self.onAcc(ret)
+        },
+        fail: function (msg, code) {
+          console.error('加速度计订阅失败', msg, code)
+          self.$prompt.showToast({ message: '传感器不可用' })
+        }
+      })
+    } catch (e) {
+      console.error('subscribeAccelerometer 异常', e)
+    }
+  },
+
+  stopSensor() {
+    try { sensor.unsubscribeAccelerometer() } catch (e) {}
+  },
+
+  onAcc(ret) {
+    if (!this.running) return
+    var now = Date.now()
+    var r = this.detector.push({ x: ret.x, y: ret.y, z: ret.z }, now)
+
+    if (r.ready && this.detector.count === 0 && this.seconds < 3) {
+      this.tip = '开始深蹲'
+    }
+    if (r.counted) {
+      this.count = this.detector.count
+      this.ring = this.count % 20 / 20
+      vibrator.vibrate({ type: 'light' })
+    } else if (r.ready) {
+      this.ring = r.progress
+    }
+  },
+
+  startTimer() {
+    var self = this
+    this.stopTimer()
+    this.timer = setInterval(function () {
+      self.seconds += 1
+      var m = Math.floor(self.seconds / 60)
+      var s = self.seconds % 60
+      self.timeText = (m < 10 ? '0' + m : m) + ':' + (s < 10 ? '0' + s : s)
+    }, 1000)
+  },
+
+  stopTimer() {
+    if (this.timer) {
+      clearInterval(this.timer)
+      this.timer = null
+    }
+  },
+
+  saveSession() {
+    if (this.count <= 0) return
+    this.todayCount += this.count
+    try {
+      storage.setSync({
+        key: 'sq_today',
+        value: { count: this.todayCount, at: Date.now() },
+        success: function () { console.log('已保存') },
+        fail: function (msg, code) { console.error('保存失败', msg, code) }
+      })
+    } catch (e) {
+      console.error('storage 异常', e)
+    }
+  }
+}
+</script>
+
+<style>
+.page {
+  flex-direction: column;
+  align-items: center;
+  justify-content: space-between;
+  background-color: #0b0c0f;
+  padding: 12px 10px 16px;
+  width: 100%;
+  height: 100%;
+}
+
+.header {
+  width: 100%;
+  flex-direction: row;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.title {
+  font-size: 13px;
+  color: #c6f24e;
+  font-weight: bold;
+}
+
+.mode {
+  font-size: 10px;
+  color: #8a8f99;
+  padding: 2px 6px;
+  border-radius: 8px;
+  background-color: #1f232b;
+}
+
+.count-wrap {
+  flex-direction: row;
+  align-items: baseline;
+  margin-top: 6px;
+}
+
+.count {
+  font-size: 46px;
+  color: #ffffff;
+  font-weight: bold;
+}
+
+.unit {
+  font-size: 12px;
+  color: #6b7280;
+  margin-left: 3px;
+}
+
+.hint {
+  font-size: 10px;
+  color: #6b7280;
+  margin-top: 2px;
+  height: 14px;
+}
+
+.bar-track {
+  width: 100%;
+  height: 4px;
+  border-radius: 2px;
+  background-color: #1f232b;
+  margin-top: 6px;
+}
+
+.bar-fill {
+  height: 100%;
+  border-radius: 2px;
+  background-color: #c6f24e;
+}
+
+.stats {
+  flex-direction: row;
+  justify-content: space-between;
+  width: 100%;
+  margin-top: 6px;
+}
+
+.stat {
+  font-size: 11px;
+  color: #8a8f99;
+}
+
+.btn {
+  width: 100%;
+  border-radius: 24px;
+  align-items: center;
+  justify-content: center;
+  padding: 9px 0;
+  margin-top: 6px;
+}
+
+.btn.main {
+  background-color: #c6f24e;
+}
+
+.btn.main text {
+  font-size: 15px;
+  color: #10120a;
+  font-weight: bold;
+}
+
+.btn.ghost {
+  background-color: transparent;
+  border-width: 1px;
+  border-color: #3a3f49;
+}
+
+.btn.ghost text {
+  font-size: 12px;
+  color: #8a8f99;
+}
+</style>

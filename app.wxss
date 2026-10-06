@@ -1,0 +1,130 @@
+/**
+ * 全局样式 —— 深色运动风设计语言
+ *
+ * 色板
+ *   bg        #0b0c0f   近乎纯黑，训练场景下最省眼
+ *   surface   #16181d   卡片
+ *   line      #262a32   描边
+ *   accent    #c6f24e   荧光黄绿（主强调，唯一的"多巴胺"色）
+ *   accent2   #ff6b35   橙（组间休息 / 告警）
+ *   text      #ffffff
+ *   text2     rgba(255,255,255,.55)
+ */
+
+page {
+  background: #0b0c0f;
+  color: #ffffff;
+  font-family: -apple-system, BlinkMacSystemFont, "PingFang SC", "Helvetica Neue", "Microsoft YaHei", sans-serif;
+  -webkit-font-smoothing: antialiased;
+}
+
+.page {
+  box-sizing: border-box;
+  min-height: 100vh;
+  padding: 24rpx 32rpx 64rpx;
+}
+
+/* 卡片 */
+.card {
+  background: #16181d;
+  border: 1rpx solid #262a32;
+  border-radius: 28rpx;
+  padding: 28rpx 28rpx;
+  margin-bottom: 24rpx;
+}
+
+.card-title {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  margin-bottom: 24rpx;
+}
+
+.card-title .t {
+  font-size: 30rpx;
+  font-weight: 600;
+  letter-spacing: 1rpx;
+}
+
+.card-title .s {
+  font-size: 22rpx;
+  color: rgba(255, 255, 255, .45);
+}
+
+/* 分段选择器 */
+.seg {
+  display: flex;
+  background: #101216;
+  border: 1rpx solid #262a32;
+  border-radius: 999rpx;
+  padding: 6rpx;
+}
+
+.seg-item {
+  flex: 1;
+  text-align: center;
+  padding: 16rpx 0;
+  font-size: 26rpx;
+  color: rgba(255, 255, 255, .5);
+  border-radius: 999rpx;
+  transition: all .18s ease;
+}
+
+.seg-item.on {
+  background: #c6f24e;
+  color: #10120a;
+  font-weight: 600;
+}
+
+/* 按钮 */
+.btn {
+  border-radius: 999rpx;
+  text-align: center;
+  font-size: 30rpx;
+  padding: 30rpx 0;
+  background: #c6f24e;
+  color: #10120a;
+  font-weight: 600;
+}
+
+.btn.ghost {
+  background: transparent;
+  border: 1rpx solid #3a3f49;
+  color: rgba(255, 255, 255, .8);
+}
+
+.btn.danger {
+  background: transparent;
+  border: 1rpx solid #5a2b22;
+  color: #ff7a5c;
+}
+
+.btn.plain {
+  background: #1f232b;
+  color: rgba(255, 255, 255, .9);
+}
+
+.btn-row {
+  display: flex;
+  gap: 24rpx;
+}
+
+.btn-row > * {
+  flex: 1;
+}
+
+/* 通用小标签 */
+.chip {
+  display: inline-block;
+  padding: 8rpx 18rpx;
+  border-radius: 999rpx;
+  background: #1f232b;
+  color: rgba(255, 255, 255, .65);
+  font-size: 22rpx;
+}
+
+.hint {
+  font-size: 22rpx;
+  color: rgba(255, 255, 255, .38);
+  line-height: 1.7;
+}

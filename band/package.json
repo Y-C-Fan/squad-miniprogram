@@ -1,0 +1,14 @@
+{
+  "name": "squad-band",
+  "version": "1.0.0",
+  "versionCode": 1,
+  "minPlatformVersion": 1030,
+  "author": "Y-C-Fan",
+  "description": "深蹲自动计数 —— 小米手环 9 Pro 版",
+  "license": "MIT",
+  "scripts": {
+    "build": "aiot build --mode release",
+    "watch": "aiot watch",
+    "clean": "aiot clean"
+  }
+}

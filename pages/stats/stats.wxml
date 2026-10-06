@@ -1,0 +1,118 @@
+<view class="page">
+
+  <view class="hero">
+    <view class="hero-main">
+      <text class="hero-num">{{sum.totalCount}}</text>
+      <text class="hero-unit">累计次数</text>
+    </view>
+    <view class="hero-sub">
+      <text>已练 {{sum.sessions}} 次</text>
+      <text class="dot">·</text>
+      <text>总时长 {{sumDurationText}}</text>
+      <text class="dot">·</text>
+      <text>{{sum.totalCalories}} 千卡</text>
+    </view>
+  </view>
+
+  <!-- 核心指标四宫格 -->
+  <view class="grid">
+    <view class="grid-item">
+      <text class="gv">{{sum.streak}}</text>
+      <text class="gl">连续天数</text>
+    </view>
+    <view class="grid-item">
+      <text class="gv">{{sum.bestStreak}}</text>
+      <text class="gl">最长连续</text>
+    </view>
+    <view class="grid-item">
+      <text class="gv">{{sum.bestSingle}}</text>
+      <text class="gl">单次最多</text>
+    </view>
+    <view class="grid-item">
+      <text class="gv">{{sum.avgCount}}</text>
+      <text class="gl">场均次数</text>
+    </view>
+  </view>
+
+  <!-- 近 7 天 -->
+  <view class="card">
+    <view class="card-title">
+      <text class="t">近 7 天</text>
+      <text class="s">峰值 {{weekMax}} 次</text>
+    </view>
+    <view class="bars">
+      <view class="bar-col" wx:for="{{week}}" wx:key="key">
+        <text class="bar-v" wx:if="{{item.count > 0}}">{{item.count}}</text>
+        <view class="bar {{item.today ? 'today' : ''}}" style="height:{{item.height}}rpx"></view>
+        <text class="bar-l">{{item.label}}</text>
+      </view>
+    </view>
+  </view>
+
+  <!-- 热力图 -->
+  <view class="card">
+    <view class="card-title">
+      <text class="t">12 周训练热力图</text>
+      <text class="s">峰值 {{heat.max}}</text>
+    </view>
+    <view class="heat">
+      <view wx:for="{{heat.cells}}"
+            wx:key="key"
+            class="hcell lv{{item.level}} {{item.future ? 'future' : ''}}"></view>
+    </view>
+    <view class="heat-legend">
+      <text>少</text>
+      <view class="hcell lv0"></view>
+      <view class="hcell lv1"></view>
+      <view class="hcell lv2"></view>
+      <view class="hcell lv3"></view>
+      <view class="hcell lv4"></view>
+      <text>多</text>
+    </view>
+  </view>
+
+  <!-- 勋章 -->
+  <view class="card">
+    <view class="card-title">
+      <text class="t">勋章墙</text>
+      <text class="s">{{unlockedCount}} / {{badges.length}}</text>
+    </view>
+    <view class="badges">
+      <view class="badge {{item.unlocked ? 'on' : ''}}" wx:for="{{badges}}" wx:key="id">
+        <text class="b-icon">{{item.icon}}</text>
+        <text class="b-name">{{item.name}}</text>
+        <text class="b-desc">{{item.desc}}</text>
+        <view class="b-bar">
+          <view class="b-bar-in" style="width:{{item.progress * 100}}%"></view>
+        </view>
+        <text class="b-val">{{item.val}} / {{item.goal}}</text>
+      </view>
+    </view>
+  </view>
+
+  <!-- 记录 -->
+  <view class="card">
+    <view class="card-title">
+      <text class="t">训练记录</text>
+      <text class="s">长按可删除</text>
+    </view>
+
+    <view class="empty" wx:if="{{empty}}">
+      <text class="empty-t">还没有训练记录</text>
+      <view class="btn ghost empty-btn" bindtap="goTrain">去练一组</view>
+    </view>
+
+    <view class="record" wx:for="{{recent}}" wx:key="id" data-id="{{item.id}}" bindlongpress="onRemove">
+      <view class="r-left">
+        <text class="r-day">{{item.dayLabel}}</text>
+        <text class="r-time">{{item.clock}} · {{item.mode}}</text>
+      </view>
+      <view class="r-mid">
+        <text class="r-dur">{{item.durationText}}</text>
+        <text class="r-cal">{{item.calories}} 千卡</text>
+      </view>
+      <text class="r-count">{{item.count}}</text>
+    </view>
+  </view>
+
+</view>

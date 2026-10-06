@@ -1,0 +1,36 @@
+{
+  "pages": [
+    "pages/index/index",
+    "pages/stats/stats",
+    "pages/settings/settings"
+  ],
+  "window": {
+    "backgroundTextStyle": "light",
+    "navigationBarBackgroundColor": "#0b0c0f",
+    "navigationBarTitleText": "蹲队 Squad",
+    "navigationBarTextStyle": "white",
+    "backgroundColor": "#0b0c0f"
+  },
+  "tabBar": {
+    "color": "#6b7280",
+    "selectedColor": "#c6f24e",
+    "backgroundColor": "#101216",
+    "borderStyle": "black",
+    "list": [
+      {
+        "pagePath": "pages/index/index",
+        "text": "训练"
+      },
+      {
+        "pagePath": "pages/stats/stats",
+        "text": "数据"
+      },
+      {
+        "pagePath": "pages/settings/settings",
+        "text": "我的"
+      }
+    ]
+  },
+  "style": "v2",
+  "sitemapLocation": "sitemap.json"
+}

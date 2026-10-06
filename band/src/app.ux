@@ -1,0 +1,16 @@
+<script>
+/**
+ * 手环版 App 入口
+ * 与小程序共用同一套计数算法（common/squat-detector.js）
+ */
+
+import storage from '@system.storage'
+
+export default {
+  onCreate() {
+    console.log('蹲队 Squad 手环版启动')
+  },
+
+  onDestroy() {}
+}
+</script>

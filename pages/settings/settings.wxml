@@ -1,0 +1,80 @@
+<view class="page">
+
+  <!-- 身体参数 -->
+  <view class="card">
+    <view class="card-title"><text class="t">身体参数</text></view>
+    <view class="row">
+      <text class="row-k">体重（kg）</text>
+      <input class="row-input" type="digit" value="{{settings.weight}}" bindblur="onWeight" />
+    </view>
+    <view class="hint-row">仅用于卡路里估算：MET 5.0 × 体重(kg) × 时长(h)</view>
+  </view>
+
+  <!-- 检测 -->
+  <view class="card">
+    <view class="card-title"><text class="t">检测方式</text></view>
+    <view class="seg">
+      <view wx:for="{{modeList}}" wx:key="key"
+            class="seg-item {{settings.detectMode === item.key ? 'on' : ''}}"
+            data-key="{{item.key}}" bindtap="onMode">{{item.label}}</view>
+    </view>
+    <view class="hint-row">{{modeDesc}}</view>
+
+    <view class="sub-title">灵敏度</view>
+    <view class="seg">
+      <view wx:for="{{sensList}}" wx:key="key"
+            class="seg-item {{settings.sensitivity === item.key ? 'on' : ''}}"
+            data-key="{{item.key}}" bindtap="onSens">{{item.label}}</view>
+    </view>
+    <view class="hint-row">{{sensDesc}}</view>
+  </view>
+
+  <!-- 反馈 -->
+  <view class="card">
+    <view class="card-title"><text class="t">反馈</text></view>
+    <view class="row">
+      <text class="row-k">每次深蹲震动</text>
+      <switch color="#c6f24e" checked="{{settings.vibration}}"
+              data-key="vibration" bindchange="onSwitch" />
+    </view>
+    <view class="row">
+      <text class="row-k">语音报数</text>
+      <switch color="#c6f24e" checked="{{settings.voice}}"
+              data-key="voice" bindchange="onSwitch" />
+    </view>
+    <view class="sub-title">报数间隔</view>
+    <view class="seg">
+      <view wx:for="{{everyList}}" wx:key="*this"
+            class="seg-item {{settings.voiceEvery === item ? 'on' : ''}}"
+            data-key="{{item}}" bindtap="onEvery">每 {{item}} 次</view>
+    </view>
+    <view class="hint-row">语音需在 <text class="code">utils/audio.js</text> 注册 TTS 实现后才生效；未注册时只会弹出数字提示</view>
+
+    <view class="row">
+      <text class="row-k">显示调试信息</text>
+      <switch color="#c6f24e" checked="{{settings.debug}}"
+              data-key="debug" bindchange="onSwitch" />
+    </view>
+    <view class="hint-row">训练页实时显示倾角、运动量、状态机状态，调阈值时很有用</view>
+  </view>
+
+  <!-- 数据 -->
+  <view class="card">
+    <view class="card-title"><text class="t">数据</text></view>
+    <view class="hint-row">所有记录只存在本机，不上传任何服务器。</view>
+    <view class="btn-row" style="margin-top:24rpx">
+      <view class="btn ghost" bindtap="onExport">导出 CSV</view>
+      <view class="btn danger" bindtap="onClear">清空记录</view>
+    </view>
+  </view>
+
+  <!-- 关于 -->
+  <view class="card">
+    <view class="card-title"><text class="t">关于</text></view>
+    <view class="hint-row">
+      蹲队 Squad v1.0.0 —— 深蹲自动计数。
+      数据本地存储，无网络请求，无广告，无内购。
+    </view>
+  </view>
+
+</view>

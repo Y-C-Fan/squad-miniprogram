@@ -1,0 +1,27 @@
+{
+  "name": "squad-band",
+  "versionName": "1.0.0",
+  "versionCode": 1,
+  "minPlatformVersion": 1030,
+  "icon": "/common/logo.png",
+  "features": [
+    { "name": "system.prompt" },
+    { "name": "system.vibrator" },
+    { "name": "system.storage" },
+    { "name": "system.sensor" }
+  ],
+  "permissions": [],
+  "config": {
+    "logLevel": "log",
+    "designWidth": 168,
+    "screenOrientation": "portrait"
+  },
+  "router": {
+    "entry": "pages/index",
+    "pages": {
+      "pages/index": {
+        "component": "index"
+      }
+    }
+  }
+}

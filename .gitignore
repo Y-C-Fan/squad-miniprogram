@@ -1,0 +1,20 @@
+# 微信开发者工具本地产物
+project.private.config.json
+.wxcache/
+
+# node
+node_modules/
+
+# Vela 快应用构建产物
+band/dist/
+band/.aiot-ide/
+
+# 编辑器 / 系统
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
+
+# 日志
+*.log
+npm-debug.log*
