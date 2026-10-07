@@ -10,8 +10,8 @@ set -e
 cd "$(dirname "$0")"
 
 MODE="${1:-debug}"
-NODE="C:/Users/chaowi/.workbuddy/binaries/node/versions/22.22.2-5/node.exe"
-NPM="C:/Users/chaowi/.workbuddy/binaries/node/versions/22.22.2-5/npm.cmd"
+NODE="C:/Users/chaowi/.workbuddy/binaries/node/versions/22.22.2-6/node.exe"
+NPM="C:/Users/chaowi/.workbuddy/binaries/node/versions/22.22.2-6/npm.cmd"
 
 echo "==> 检查依赖"
 if [ ! -d node_modules/aiot-toolkit ]; then
@@ -20,6 +20,11 @@ if [ ! -d node_modules/aiot-toolkit ]; then
   # @inquirer/*，与顶层版本冲突，不加会装出无法解析的依赖树。
   "$NPM" install aiot-toolkit --legacy-peer-deps --no-audit --no-fund
 fi
+
+echo "==> 同步核心算法"
+# Vela 不支持 require 外部目录，手环工程必须自带一份算法副本。
+# 不做这一步的话，改了 utils/ 忘了同步，手环版会一直跑旧阈值。
+"$NODE" ../tools/sync-band.js
 
 if [ "$MODE" = "release" ] && [ ! -f sign/private.pem ]; then
   echo "    缺少签名证书，正在生成..."

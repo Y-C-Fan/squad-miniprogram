@@ -12,7 +12,8 @@
     { "name": "system.sensor" },
     { "name": "system.vibrator" },
     { "name": "system.storage" },
-    { "name": "system.prompt" }
+    { "name": "system.prompt" },
+    { "name": "system.fetch" }
   ],
   "config": {
     "logLevel": "log",

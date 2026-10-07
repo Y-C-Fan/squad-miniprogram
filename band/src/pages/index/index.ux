@@ -34,7 +34,11 @@
       <text class="btn-text">{{ running ? "结束并保存" : "开始训练" }}</text>
     </div>
 
-    <text class="foot" if="{{ !running }}">灵敏度：中 · 站着别动 1 秒</text>
+    <div class="sens" onclick="cycleLevel" if="{{ !running }}">
+      <text class="sens-text">灵敏度：{{ sensLabel }} · 点此切换</text>
+    </div>
+
+    <text class="foot" if="{{ !running }}">{{ configState }}</text>
   </div>
 </template>
 
@@ -42,15 +46,38 @@
 import sensor from '@system.sensor'
 import vibrator from '@system.vibrator'
 import storage from '@system.storage'
+import fetch from '@system.fetch'
 import SquatDetector from '../../common/squat-detector.js'
 
 var MODE_LABEL = { tilt: '口袋', lift: '手持' }
+var LEVEL_LABEL = { low: '低', medium: '中', high: '高' }
 var KEY_TODAY = 'sq_today'
+
+// 远端阈值配置。改了它就不用重装 rpk —— 重新部署这个文件、手环重启应用即可。
+// 文件由 tools/make-band-config.js 从 utils/squat-detector.js 导出。
+var CONFIG_URL = 'https://squat-counter-82622.app.workbuddy.host/band-config.json'
 
 function pad(n) { return n < 10 ? '0' + n : '' + n }
 function dayKey(ts) {
   var d = new Date(ts)
   return d.getFullYear() + '-' + pad(d.getMonth() + 1) + '-' + pad(d.getDate())
+}
+
+/**
+ * Vela 各版本 fetch 返回体的形状不完全一致（有的包一层 data，有的直接给字符串），
+ * 这里宽松解析，拿不到就当没有远端配置 —— 内置默认永远能跑。
+ */
+function parseBody(res) {
+  try {
+    var d = res
+    if (d && d.data !== undefined && d.data !== null) d = d.data
+    if (typeof d === 'string') d = JSON.parse(d)
+    else if (d && typeof d.data === 'string') d = JSON.parse(d.data)
+    return d && typeof d === 'object' ? d : null
+  } catch (e) {
+    console.log('配置解析失败 ' + e)
+    return null
+  }
 }
 
 export default {
@@ -63,6 +90,9 @@ export default {
     ringPct: 0,
     mode: 'lift',
     modeLabel: '手持',
+    level: 'medium',
+    sensLabel: '灵敏度：中',
+    configState: '参数：内置',
     todayCount: 0,
     stateText: '',
     // 校准状态：把手环上的校准过程显式画出来。
@@ -76,7 +106,7 @@ export default {
   },
 
   onInit() {
-    this.detector = new SquatDetector({ mode: this.mode, sensitivity: 'medium' })
+    this.detector = new SquatDetector({ mode: this.mode, sensitivity: this.level })
     this.timer = null
     this.ringPct = 0
     this.stateText = ''
@@ -84,6 +114,7 @@ export default {
 
   onShow() {
     var self = this
+    this.loadRemoteConfig()
     // 读取今日累计。只在同一自然日内累加，跨天自动归零。
     try {
       storage.get({
@@ -119,7 +150,7 @@ export default {
   },
 
   start() {
-    this.detector = new SquatDetector({ mode: this.mode, sensitivity: 'medium' })
+    this.detector = new SquatDetector({ mode: this.mode, sensitivity: this.level })
     this.running = true
     this.count = 0
     this.seconds = 0
@@ -163,8 +194,61 @@ export default {
     this.mode = this.mode === 'lift' ? 'tilt' : 'lift'
     this.modeLabel = MODE_LABEL[this.mode]
     if (this.running) this.detector.setMode(this.mode)
-    else this.detector = new SquatDetector({ mode: this.mode, sensitivity: 'medium' })
+    else this.detector = new SquatDetector({ mode: this.mode, sensitivity: this.level })
     this.tip = '已切到' + this.modeLabel + '模式'
+  },
+
+  cycleLevel() {
+    var order = ['low', 'medium', 'high']
+    var i = order.indexOf(this.level)
+    this.setLevel(order[(i + 1) % order.length])
+  },
+
+  setLevel(level) {
+    if (LEVEL_LABEL[level] === undefined) return
+    this.level = level
+    this.sensLabel = LEVEL_LABEL[level]
+    if (this.running) this.detector.setSensitivity(level)
+    else this.detector = new SquatDetector({ mode: this.mode, sensitivity: level })
+    this.tip = '灵敏度：' + this.sensLabel
+  },
+
+  /**
+   * 拉远端阈值配置。
+   *
+   * 手环本身没有 Wi-Fi，要先在「小米运动健康」里点一下同步/保持连接，应用才能借手机联网。
+   * 拉不到就用内置默认值，不影响使用 —— 所以这个失败路径必须是静默降级而不是报错。
+   */
+  loadRemoteConfig() {
+    var self = this
+    fetch.fetch({
+      url: CONFIG_URL,
+      timeout: 4000,
+      success: function (res) {
+        var j = parseBody(res)
+        if (!j) { self.configState = '参数：内置（响应异常）'; return }
+        if (!self.detector.applyRemote(j)) {
+          self.configState = '参数：内置（远端被拒）'
+          return
+        }
+        if (j.defaults) {
+          var m = j.defaults.mode
+          var lv = j.defaults.sensitivity
+          if (m === 'tilt' || m === 'lift') { self.mode = m; self.modeLabel = MODE_LABEL[m] }
+          if (LEVEL_LABEL[lv] !== undefined) { self.level = lv; self.sensLabel = LEVEL_LABEL[lv] }
+          // 让本次变更立刻生效（预设是模块级的，重建即可拿到新阈值）
+          self.detector = new SquatDetector({ mode: self.mode, sensitivity: self.level })
+        }
+        // 把生效的 enter 打出来：一眼能确认拉到的是哪一版参数
+        var enter = self.detector.getConfig().enter
+        self.configState = '阈值 ' + enter + (j._updated ? ' @' + j._updated : '')
+        if (self.running) self.configState += ' · 下次生效'
+      },
+      fail: function (msg, code) {
+        console.log('配置拉取失败 ' + msg + ' ' + code)
+        self.configState = '参数：内置（未连手机同步）'
+      }
+    })
   },
 
   vibrate(type) {
@@ -410,5 +494,18 @@ export default {
 .foot {
   font-size: 9px;
   color: #4a4f58;
+}
+
+.sens {
+  width: 100%;
+  align-items: center;
+  padding: 5px 0;
+  border-radius: 12px;
+  background-color: #1a1d23;
+}
+
+.sens-text {
+  font-size: 10px;
+  color: #8a8f99;
 }
 </style>

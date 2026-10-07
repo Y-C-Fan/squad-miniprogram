@@ -311,6 +311,116 @@ SquatDetector.prototype.setSensitivity = function (level) {
 
 SquatDetector.prototype.getConfig = function () { return this.cfg }
 
+/**
+ * 远端阈值覆盖（目前只有手环版用）
+ *
+ * 为什么需要：自用场景下阈值不可能一次调对，而每改一次阈值都要重新编译 +
+ * 蓝牙重装 rpk，迭代成本太高。所以让手环启动时从网上拉一份阈值配置 ——
+ * 改参数只需改服务器上的一个 JSON 并重启应用，手环那边什么都不用动。
+ *
+ * 三条安全线（远端 JSON 是网络输入，不能什么都能塞进来）：
+ *   1. 字段白名单，未知键直接判定为非法配置
+ *   2. 每个值必须是正的有限数
+ *   3. 合并后必须满足 exit < enter（滞回带），否则回滚
+ *
+ * 任何一条不满足 → 整体回滚到内置默认并返回 false，绝不让坏配置污染预设。
+ *
+ * 注意：改的是模块级 PRESET 对象，因此同进程内后续 new 出来的实例都会用新值。
+ * 手环每次冷启动都会重新拉一次，不存在"坏配置永久生效"。
+ */
+var REMOTE_KEYS = ['enter', 'exit', 'minDownMs', 'maxDownMs', 'minMotion', 'minGapMs']
+
+function clonePresets(src) {
+  var out = {}
+  Object.keys(src).forEach(function (lv) {
+    out[lv] = {}
+    Object.keys(src[lv]).forEach(function (k) { out[lv][k] = src[lv][k] })
+  })
+  return out
+}
+
+function restorePresets(snapshot) {
+  var pair = [[TILT_PRESET, snapshot.tilt], [LIFT_PRESET, snapshot.lift]]
+  pair.forEach(function (p) {
+    var target = p[0]
+    var snap = p[1]
+    Object.keys(target).forEach(function (lv) {
+      var dst = target[lv]
+      var src = snap[lv]
+      if (!src) return
+      if (!dst) { target[lv] = {}; dst = target[lv] }
+      // 必须原地覆盖，不能 delete 后重建：
+      // 已存在的 detector 实例的 this.cfg 可能正指向这个对象，
+      // 换引用的话回滚对它无效（实例仍看到被污染的旧值）。
+      Object.keys(dst).forEach(function (k) { delete dst[k] })
+      Object.keys(src).forEach(function (k) { dst[k] = src[k] })
+    })
+  })
+}
+
+function validPatch(patch) {
+  if (!patch || typeof patch !== 'object') return false
+  var keys = Object.keys(patch)
+  if (!keys.length) return false
+  for (var i = 0; i < keys.length; i++) {
+    if (REMOTE_KEYS.indexOf(keys[i]) < 0) return false
+    var v = patch[keys[i]]
+    if (typeof v !== 'number' || !isFinite(v) || v <= 0) return false
+  }
+  return true
+}
+
+SquatDetector.prototype.applyRemote = function (remote) {
+  if (!remote || typeof remote !== 'object') return false
+
+  var self = this
+  var snapshot = { tilt: clonePresets(TILT_PRESET), lift: clonePresets(LIFT_PRESET) }
+
+  // 任何一条校验不过就走这里：还原预设 + 把实例的引用重新绑回预设表
+  function revert() {
+    restorePresets(snapshot)
+    self.presets = self.mode === 'lift' ? LIFT_PRESET : TILT_PRESET
+    self.cfg = self.presets[self.level || 'medium']
+    return false
+  }
+
+  var modes = { tilt: TILT_PRESET, lift: LIFT_PRESET }
+  var names = ['tilt', 'lift']
+  var applied = 0
+
+  for (var m = 0; m < names.length; m++) {
+    var byLevel = remote[names[m]]
+    if (!byLevel || typeof byLevel !== 'object') continue
+    var levels = Object.keys(byLevel)
+    for (var i = 0; i < levels.length; i++) {
+      var lv = levels[i]
+      var base = modes[names[m]][lv]
+      if (!base) continue                      // 未知档位：忽略而不是新建
+      if (!validPatch(byLevel[lv])) return revert()
+
+      var merged = {}
+      Object.keys(base).forEach(function (k) { merged[k] = base[k] })
+      Object.keys(byLevel[lv]).forEach(function (k) { merged[k] = byLevel[lv][k] })
+
+      // 合并后再验滞回带：只改 enter 不改 exit 也可能被改成反的
+      if (!(merged.exit < merged.enter)) return revert()
+
+      Object.keys(merged).forEach(function (k) { base[k] = merged[k] })
+      applied++
+    }
+  }
+
+  if (!applied) return revert()
+
+  if (typeof remote.calibStill === 'number' && isFinite(remote.calibStill) && remote.calibStill > 0) {
+    this.calibStill = remote.calibStill
+  }
+
+  this.presets = this.mode === 'lift' ? LIFT_PRESET : TILT_PRESET
+  this.cfg = this.presets[this.level]
+  return true
+}
+
 SquatDetector.prototype.reset = function () {
   this.gravity = null       // 低通后的重力方向（设备坐标系）
   this.baseline = null      // 校准期锁定的基准重力方向

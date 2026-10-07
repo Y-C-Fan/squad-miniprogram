@@ -68,6 +68,18 @@
 
 所以对一个自用的小工具来说，**为上手环市场去办软著 + 备案性价比很低**，而且即使上了，能装的手环机型也只有 8 Pro / 9 / 9 Pro / 10。这个项目的取舍是：**把零门槛的网页版（PWA）做成主入口**，手环版作为技术验证保留在 `band/`。
 
+### 只自己用的话，三端各自的成本
+
+| | 装一次要多久 | 之后改参数的成本 |
+|---|---|---|
+| 🌐 网页版 / PWA | 0（点链接） | 改代码 → 重新部署 → 刷新页面 |
+| 📱 微信小程序 | 注册 + 实名 + 备案 + 审核，1~7 天 | 同上，但要再传一次审核 |
+| ⌚ 手环 | 安卓手机 + AstroBox 蓝牙推包，10 分钟 | **改 JSON → 重新部署 → 退出应用再进，不用重装** |
+
+手环版的关键设计是**阈值从网上拉**（`web/band-config.json`），因为侧载一次太麻烦，改一次阈值就重装一次完全不可接受。详见 [band/README.md](band/README.md#远端调参改阈值不用重装-rpk)。
+
+⚠️ 手环自身没有 Wi-Fi，联网是借小米运动健康的蓝牙通道走手机网络，所以拉配置前要在手机侧点一次同步。拉不到就静默用内置默认值，不影响计数。
+
 
 ---
 
@@ -77,7 +89,7 @@
 |---|---|---|
 | 📱 微信小程序 | 需注册后上传 | 完整功能，见 [docs/LAUNCH.md](docs/LAUNCH.md) |
 | 🌐 网页版 / PWA | ✅ **已上线可用** | [squat-counter-82622.app.workbuddy.host](https://squat-counter-82622.app.workbuddy.host/)，可装到桌面、可离线 |
-| ⌚ 手环 9 Pro | 侧载可用（官方市场上架需软著 + 备案） | `band/`，见 [band/README.md](band/README.md) |
+| ⌚ 手环 9 Pro | 侧载可用（官方市场上架需软著 + 备案） | `band/`，阈值走远端配置，调参不用重装，见 [band/README.md](band/README.md) |
 
 `utils/squat-detector.js` 是唯一真相源，三端共用。改了它之后跑 `node tools/build-web.js` 重新生成网页版。构建脚本会拦住任何 `wx.` / `document.` / `require(` 混入算法文件的情况。
 
@@ -172,7 +184,10 @@ top ── signal ≥ enter ──> bottom ── signal ≤ exit ──> top  (
 node tools/simulate.js          # 32 项：两种模式 × 三档灵敏度 × 干扰场景
 node tools/test-logic.js        # 36 项：卡路里 / 连续天数 / 热力图 / 勋章 / 存储
 node tools/test-calibration.js  # 14 项：校准静止判定 / 倾角基准 / 零点漂移
+node tools/test-remote.js       # 37 项：远端阈值覆盖的接受/拒绝/整体回滚
 node tools/build-web.js         # 重新生成 web/index.html
+node tools/make-band-config.js  # 重新生成 web/band-config.json（手环远端参数）
+node tools/sync-band.js --check # 校验手环算法副本与 utils/ 一致
 python tools/make-icons.py      # 重新生成 PWA 图标（纯标准库，不用装 Pillow）
 ```
 
@@ -196,12 +211,13 @@ python tools/make-icons.py      # 重新生成 PWA 图标（纯标准库，不�
 │   ├── fitness.js          卡路里 / 连续天数 / 热力图 / 勋章
 │   ├── format.js           时间日期格式化
 │   └── audio.js            报数反馈的可插拔层
-├── tools/            离线自检 + 网页版构建 + PWA 图标生成（不打包进小程序）
+├── tools/            离线自检 + 网页版构建 + PWA 图标 + 手环同步与远端配置
 ├── web/              网页版 / PWA（已上线）
 │   ├── index.template.html
 │   ├── index.html          ← 由 tools/build-web.js 生成，勿手改
 │   ├── manifest.webmanifest  PWA 清单（装到桌面的依据）
 │   ├── sw.js               Service Worker（离线缓存）
+│   ├── band-config.json    手环远端阈值配置，改这里就不用重装 rpk
 │   └── icon-*.png          由 tools/make-icons.py 生成
 └── band/             小米手环 9 Pro 版（Vela 快应用）
 ```
