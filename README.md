@@ -41,11 +41,33 @@
 
 ## 现在就能用
 
-**网页版（已上线，无需注册）**：<https://squat-counter-82622.app.workbuddy.host/>
+**网页版 / PWA（已上线，无需注册）**：<https://squat-counter-82622.app.workbuddy.host/>
 
 手机浏览器打开即可，跑的是**同一份算法源码**。iOS 会弹传感器授权，点「开始使用」允许即可。**建议先用它把阈值调顺手，再去做微信小程序。**
 
+已支持**装到桌面 + 离线使用**：安卓 Chrome 点页面底部「装到桌面」，iPhone 用 Safari「分享 → 添加到主屏幕」。装完是一个全屏独立窗口，观感接近原生 App；Service Worker 会预缓存页面，**断网也能练**，数据全部留在本机。
+
 **微信小程序**：需要注册 + 实名认证，见 [docs/LAUNCH.md](docs/LAUNCH.md)。代码已就绪，改一行 AppID 就能传。
+
+---
+
+## 分发路径：为什么是现在这个形态
+
+| 渠道 | 用户拿到的方式 | 你要付出的 | 覆盖面 |
+|---|---|---|---|
+| 🌐 网页版 / PWA | 点链接 / 装到桌面 | 无 | 所有手机浏览器 |
+| 📱 微信小程序 | 微信搜或扫码 | 个人主体注册 + 实名 + 小程序备案 + 审核 1~7 天 | 微信生态 |
+| ⌚ 手环·官方市场 | 手环上搜装 | 开发者实名 + **软著** + **APP 备案** + 快应用审核 | 仅 Vela 手环 |
+| ⌚ 手环·侧载 rpk | ADB 或第三方 App 导入 | 无 | 同上，但用户操作成本极高 |
+
+**手环能进官方市场，不是只能侧载。** 事实核对（2026-10）：
+
+- 小米手环 8 Pro / 9 / 9 Pro / 10 跑 **Vela OS**，第三方应用形态是 `.rpk` 快应用。官方分发入口是 **[快应用分发](https://dev.mi.com/xiaomihyperos/quickapp-distribute)**：上传 rpk → 快应用备案 → 审核 → 上架，官方明确写了支持「手机 / 音箱 / 智能穿戴」跨设备分发。
+- 但上架门槛跟小米应用商店一致（[应用商店上架要求](https://dev.mi.com/distribute/doc/details?pId=1322)）：**软著**（软著登记证书 / APP 电子版权认证证书 / 软著认证证书，三选一）+ **工信部 APP 备案** + 开发者实名，缺一不可。软著常规办理周期 30~60 工作日。
+- 别走错门：`dev.mi.com` 的「手表应用发布」上传的是 **APK**，那是跑 Android 的 Xiaomi Watch，手环要走**快应用**入口。
+
+所以对一个自用的小工具来说，**为上手环市场去办软著 + 备案性价比很低**，而且即使上了，能装的手环机型也只有 8 Pro / 9 / 9 Pro / 10。这个项目的取舍是：**把零门槛的网页版（PWA）做成主入口**，手环版作为技术验证保留在 `band/`。
+
 
 ---
 
@@ -54,8 +76,8 @@
 | 形态 | 状态 | 说明 |
 |---|---|---|
 | 📱 微信小程序 | 需注册后上传 | 完整功能，见 [docs/LAUNCH.md](docs/LAUNCH.md) |
-| 🌐 网页版 | ✅ **已上线可用** | [squat-counter-82622.app.workbuddy.host](https://squat-counter-82622.app.workbuddy.host/)，单文件 25.5KB |
-| ⌚ 手环 9 Pro | 需 AIoT IDE 编译侧载 | `band/`，见 [band/README.md](band/README.md) |
+| 🌐 网页版 / PWA | ✅ **已上线可用** | [squat-counter-82622.app.workbuddy.host](https://squat-counter-82622.app.workbuddy.host/)，可装到桌面、可离线 |
+| ⌚ 手环 9 Pro | 侧载可用（官方市场上架需软著 + 备案） | `band/`，见 [band/README.md](band/README.md) |
 
 `utils/squat-detector.js` 是唯一真相源，三端共用。改了它之后跑 `node tools/build-web.js` 重新生成网页版。构建脚本会拦住任何 `wx.` / `document.` / `require(` 混入算法文件的情况。
 
@@ -147,9 +169,11 @@ top ── signal ≥ enter ──> bottom ── signal ≤ exit ──> top  (
 算法和业务逻辑都有离线自检脚本，用 Node 跑，不需要开发者工具：
 
 ```bash
-node tools/simulate.js      # 32 项：两种模式 × 三档灵敏度 × 干扰场景
-node tools/test-logic.js    # 36 项：卡路里 / 连续天数 / 热力图 / 勋章 / 存储
-node tools/build-web.js     # 重新生成 web/index.html
+node tools/simulate.js          # 32 项：两种模式 × 三档灵敏度 × 干扰场景
+node tools/test-logic.js        # 36 项：卡路里 / 连续天数 / 热力图 / 勋章 / 存储
+node tools/test-calibration.js  # 14 项：校准静止判定 / 倾角基准 / 零点漂移
+node tools/build-web.js         # 重新生成 web/index.html
+python tools/make-icons.py      # 重新生成 PWA 图标（纯标准库，不用装 Pillow）
 ```
 
 `simulate.js` 用合成加速度数据（含噪声）喂给探测器，覆盖 25°~60° 幅度、1.2s~3.0s 周期、以及「纯噪声」「小幅晃动」等不该计数的干扰场景。**改算法后先跑这两个脚本**，比手测靠谱得多。
@@ -172,11 +196,13 @@ node tools/build-web.js     # 重新生成 web/index.html
 │   ├── fitness.js          卡路里 / 连续天数 / 热力图 / 勋章
 │   ├── format.js           时间日期格式化
 │   └── audio.js            报数反馈的可插拔层
-├── tools/            离线自检 + 网页版构建脚本（不打包进小程序）
-├── web/              网页版（构建产物，单文件，已上线）
+├── tools/            离线自检 + 网页版构建 + PWA 图标生成（不打包进小程序）
+├── web/              网页版 / PWA（已上线）
 │   ├── index.template.html
 │   ├── index.html          ← 由 tools/build-web.js 生成，勿手改
-│   └── README.md
+│   ├── manifest.webmanifest  PWA 清单（装到桌面的依据）
+│   ├── sw.js               Service Worker（离线缓存）
+│   └── icon-*.png          由 tools/make-icons.py 生成
 └── band/             小米手环 9 Pro 版（Vela 快应用）
 ```
 

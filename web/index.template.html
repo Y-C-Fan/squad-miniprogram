@@ -5,6 +5,13 @@
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover,user-scalable=no">
 <meta name="theme-color" content="#0b0c0f">
 <title>蹲队 Squad · 深蹲自动计数</title>
+<meta name="description" content="手机放口袋或拿在手上，自动数深蹲。免安装、可离线、数据只存本机。">
+<link rel="manifest" href="./manifest.webmanifest">
+<link rel="apple-touch-icon" href="./icon-180.png">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="蹲队">
 <style>
 *{margin:0;padding:0;box-sizing:border-box;-webkit-tap-highlight-color:transparent}
 body{
@@ -141,9 +148,12 @@ button.ghost{
     <div id="hist"></div>
   </div>
 
+  <button class="ghost" id="installBtn" style="display:none">装到桌面 · 以后免开浏览器</button>
+
   <p class="note">
     数据只存在这台设备的浏览器里 · 无服务器 · 无账号<br>
-    同款微信小程序：github.com/Y-C-Fan/squad-miniprogram
+    同款微信小程序：github.com/Y-C-Fan/squad-miniprogram<br>
+    <span style="opacity:.75">离线也能用 · iPhone 可在 Safari「分享 → 添加到主屏幕」</span>
   </p>
 </div>
 
@@ -417,6 +427,31 @@ document.addEventListener('visibilitychange', function(){
 
 // 阻止双击缩放 / 页面滚动干扰
 document.addEventListener('touchmove', function(e){ if(e.touches.length>1) e.preventDefault() }, {passive:false});
+
+// ── PWA：可装到桌面 + 断网可用（不装也完全不影响使用）──
+// Android/Chrome 会触发 beforeinstallprompt，我们接管它、换成自己的按钮；
+// iOS Safari 没有这个事件，只能在「分享 → 添加到主屏幕」里手动加。
+var installBtn=$('installBtn'), deferredPrompt=null;
+addEventListener('beforeinstallprompt', function(e){
+  e.preventDefault();
+  deferredPrompt=e;
+  if(installBtn) installBtn.style.display='block';
+});
+if(installBtn){
+  installBtn.addEventListener('click', function(){
+    if(!deferredPrompt) return;
+    deferredPrompt.prompt();
+    deferredPrompt.userChoice.then(function(){
+      deferredPrompt=null;
+      installBtn.style.display='none';
+    });
+  });
+}
+if('serviceWorker' in navigator){
+  addEventListener('load', function(){
+    navigator.serviceWorker.register('./sw.js').catch(function(){});
+  });
+}
 })();
 </script>
 </body>
