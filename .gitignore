@@ -13,6 +13,9 @@ band/sign/
 band/.vessel/
 *.rpk
 
+# 例外：手环安装包要跟着 web/ 一起部署，给手机提供直接下载地址
+!web/download/*.rpk
+
 # 编辑器 / 系统
 .DS_Store
 Thumbs.db
